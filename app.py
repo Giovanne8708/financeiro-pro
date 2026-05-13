@@ -1,160 +1,146 @@
 import streamlit as st
-import pandas as pd
 import sqlite3
+import pandas as pd
 import plotly.express as px
-from datetime import datetime, timedelta
+from datetime import datetime
 
-# =========================================================
-# CONFIGURAÇÃO DE ELITE
-# =========================================================
-st.set_page_config(page_title="Financeiro Pro", layout="wide", page_icon="📈")
+st.set_page_config("Financeiro PRO", layout="wide")
 
-# CSS para esconder o menu lateral e criar cards modernos
-st.markdown("""
-    <style>
-        [data-testid="stSidebar"] { display: none; }
-        .stApp { background: #0f172a; }
-        .metric-card {
-            background: #1e293b;
-            padding: 20px;
-            border-radius: 15px;
-            border: 1px solid #334155;
-            text-align: center;
-        }
-    </style>
-""", unsafe_allow_html=True)
+DB = "financeiro_pro.db"
 
-# =========================================================
-# BANCO DE DADOS PROFISSIONAL
-# =========================================================
-def init_db():
-    conn = sqlite3.connect('financeiro_pro.db')
-    c = conn.cursor()
-    # Tabela de Saldo e Investimentos
-    c.execute('''CREATE TABLE IF NOT EXISTS status (id int primary key, saldo real, cdb real)''')
-    # Tabela de Movimentações (Entradas, Gastos, Apostas)
-    c.execute('''CREATE TABLE IF NOT EXISTS movs (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT, desc TEXT, valor REAL, cat TEXT, tipo TEXT)''')
-    # Tabela de Metas
-    c.execute('''CREATE TABLE IF NOT EXISTS metas (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, alvo REAL)''')
-    
-    c.execute("SELECT COUNT(*) FROM status")
-    if c.fetchone()[0] == 0:
-        c.execute("INSERT INTO status VALUES (1, 0.0, 0.0)")
-    conn.commit()
-    conn.close()
+# ---------------- DB ----------------
+def conn():
+    return sqlite3.connect(DB, check_same_thread=False)
 
-init_db()
+def init():
+    c = conn().cursor()
 
-# =========================================================
-# LÓGICA DE NEGÓCIO
-# =========================================================
-def format_br(v):
-    return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    c.execute("""CREATE TABLE IF NOT EXISTS categorias(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT
+    )""")
 
-def get_data():
-    conn = sqlite3.connect('financeiro_pro.db')
-    status = pd.read_sql("SELECT * FROM status WHERE id=1", conn).iloc[0]
-    movs = pd.read_sql("SELECT * FROM movs ORDER BY id DESC", conn)
-    metas = pd.read_sql("SELECT * FROM metas", conn)
-    conn.close()
-    return status, movs, metas
+    c.execute("""CREATE TABLE IF NOT EXISTS tipos(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT
+    )""")
 
-# =========================================================
-# INTERFACE PRINCIPAL
-# =========================================================
-status, movs, metas = get_data()
+    c.execute("""CREATE TABLE IF NOT EXISTS lancamentos(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        data TEXT,
+        descricao TEXT,
+        valor REAL,
+        categoria TEXT,
+        tipo TEXT
+    )""")
 
-st.title("💰 Financeiro Pro")
-st.write(f"Olá, Giovanne | {datetime.now().strftime('%d/%m/%Y')}")
+    c.execute("""CREATE TABLE IF NOT EXISTS config(
+        id INTEGER PRIMARY KEY,
+        salario REAL,
+        meta REAL
+    )""")
 
-# --- DASHBOARD DE MÉTRICAS ---
-col1, col2, col3 = st.columns(3)
+    # defaults
+    if c.execute("SELECT COUNT(*) FROM categorias").fetchone()[0] == 0:
+        for cat in ["Moradia","Alimentação","Transporte","Lazer","Contas"]:
+            c.execute("INSERT INTO categorias(nome) VALUES (?)",(cat,))
 
-with col1:
-    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-    st.metric("Saldo em Conta", format_br(status['saldo']))
-    st.markdown('</div>', unsafe_allow_html=True)
+    if c.execute("SELECT COUNT(*) FROM tipos").fetchone()[0] == 0:
+        for t in ["Entrada","Gasto","Investimento"]:
+            c.execute("INSERT INTO tipos(nome) VALUES (?)",(t,))
 
-with col2:
-    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-    st.metric("Investido (CDB Inter)", format_br(status['cdb']))
-    st.markdown('</div>', unsafe_allow_html=True)
+    if c.execute("SELECT COUNT(*) FROM config").fetchone()[0] == 0:
+        c.execute("INSERT INTO config VALUES (1,0,10000)")
 
-with col3:
-    # Projeção de rendimento (Baseado em 100% CDI ~11.15% aa)
-    rend_dia = (status['cdb'] * 0.1115 / 252)
-    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-    st.metric("Rendimento Estimado Hoje", format_br(rend_dia), delta_color="normal")
-    st.markdown('</div>', unsafe_allow_html=True)
+    conn().commit()
 
-# --- NAVEGAÇÃO POR ABAS ---
-tab1, tab2, tab3 = st.tabs(["💸 Lançamentos", "📊 Inteligência", "🎯 Metas"])
+init()
 
-with tab1:
-    with st.expander("📝 Novo Registro", expanded=True):
-        c1, c2, c3 = st.columns([2, 1, 1])
-        desc = c1.text_input("Descrição")
-        valor = c2.number_input("Valor R$", min_value=0.0)
-        tipo = c3.selectbox("Tipo", ["Gasto", "Entrada", "Aposta (Bet)", "Investir no CDB"])
-        
-        cat = st.selectbox("Categoria", ["Alimentação", "Contas Fixas", "Lazer", "Salário", "Extra", "Outros"])
-        
-        if st.button("Salvar Movimentação", use_container_width=True):
-            conn = sqlite3.connect('financeiro_pro.db')
-            cur = conn.cursor()
-            cur.execute("INSERT INTO movs (data, desc, valor, cat, tipo) VALUES (?,?,?,?,?)",
-                        (datetime.now().strftime("%Y-%m-%d"), desc, valor, cat, tipo))
-            
-            # Atualiza Saldo Real
-            if tipo == "Gasto" or tipo == "Aposta (Bet)":
-                cur.execute("UPDATE status SET saldo = saldo - ? WHERE id=1", (valor,))
-            elif tipo == "Entrada":
-                cur.execute("UPDATE status SET saldo = saldo + ? WHERE id=1", (valor,))
-            elif tipo == "Investir no CDB":
-                cur.execute("UPDATE status SET saldo = saldo - ?, cdb = cdb + ? WHERE id=1", (valor, valor))
-            
-            conn.commit()
-            conn.close()
-            st.success("Lançado com sucesso!")
-            st.rerun()
+# ---------------- LOAD ----------------
+df = pd.read_sql("SELECT * FROM lancamentos", conn())
+cats = pd.read_sql("SELECT nome FROM categorias", conn())["nome"].tolist()
+tipos = pd.read_sql("SELECT nome FROM tipos", conn())["nome"].tolist()
+config = pd.read_sql("SELECT * FROM config", conn()).iloc[0]
 
-    st.subheader("Histórico Recente")
-    st.dataframe(movs.head(10), use_container_width=True, hide_index=True)
+# ---------------- CALCULOS ----------------
+entradas = df[df.tipo=="Entrada"]["valor"].sum()
+gastos = df[df.tipo=="Gasto"]["valor"].sum()
+invest = df[df.tipo=="Investimento"]["valor"].sum()
 
-with tab2:
-    if not movs.empty:
-        col_left, col_right = st.columns(2)
-        
-        # Gastos por Categoria
-        gastos = movs[movs['tipo'].isin(['Gasto', 'Aposta (Bet)'])]
-        fig_pizza = px.pie(gastos, values='valor', names='cat', hole=0.4, title="Onde está seu dinheiro?")
-        fig_pizza.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color='white')
-        col_left.plotly_chart(fig_pizza, use_container_width=True)
-        
-        # Monitor de Apostas (Regra de Ouro)
-        total_bets = movs[movs['tipo'] == 'Aposta (Bet)']['valor'].sum()
-        col_right.markdown(f"""
-            <div style="background:#334155; padding:20px; border-radius:15px; border-left: 10px solid #f87171;">
-                <h4>Monitor de Apostas</h4>
-                <p>Total gasto este mês: <b>{format_br(total_bets)}</b></p>
-                <p><small>Mantenha sempre abaixo do seu limite estipulado.</small></p>
-            </div>
-        """, unsafe_allow_html=True)
+caixa = entradas - gastos - invest
+patrimonio = invest
+saldo_total = caixa + patrimonio
 
-with tab3:
-    st.subheader("Suas Metas de Longo Prazo")
-    c_m1, c_m2 = st.columns(2)
-    m_nome = c_m1.text_input("Nome da Meta (Ex: Viagem)")
-    m_alvo = c_m2.number_input("Valor Alvo R$")
-    if st.button("Criar Nova Meta"):
-        conn = sqlite3.connect('financeiro_pro.db')
-        conn.execute("INSERT INTO metas (nome, alvo) VALUES (?,?)", (m_nome, m_alvo))
-        conn.commit()
-        conn.close()
+# ---------------- HEADER ----------------
+st.title("💎 Financeiro PRO")
+
+c1,c2,c3,c4 = st.columns(4)
+c1.metric("Caixa Atual", f"R$ {caixa:,.2f}")
+c2.metric("Patrimônio", f"R$ {patrimonio:,.2f}")
+c3.metric("Saldo Total", f"R$ {saldo_total:,.2f}")
+c4.metric("Meta", f"R$ {config.meta:,.2f}")
+
+# ---------------- TABS ----------------
+t1,t2,t3,t4 = st.tabs(["Visão Geral","Lançamentos","Diagnóstico","Configurações"])
+
+# ---------------- VISÃO ----------------
+with t1:
+    if not df.empty:
+        fig = px.pie(df[df.tipo=="Gasto"], values="valor", names="categoria")
+        st.plotly_chart(fig, use_container_width=True)
+
+# ---------------- LANÇAMENTOS ----------------
+with t2:
+    st.subheader("Novo Lançamento")
+
+    d = st.text_input("Descrição")
+    v = st.number_input("Valor",0.0)
+    c = st.selectbox("Categoria", cats)
+    t = st.selectbox("Tipo", tipos)
+
+    if st.button("Salvar"):
+        conn().execute(
+            "INSERT INTO lancamentos(data,descricao,valor,categoria,tipo) VALUES (?,?,?,?,?)",
+            (datetime.now(),d,v,c,t)
+        )
+        conn().commit()
         st.rerun()
-    
-    st.divider()
-    for _, meta in metas.iterrows():
-        progresso = min(status['cdb'] / meta['alvo'], 1.0) if meta['alvo'] > 0 else 0
-        st.write(f"**{meta['nome']}** ({format_br(status['cdb'])} de {format_br(meta['alvo'])})")
-        st.progress(progresso)
+
+    st.dataframe(df, use_container_width=True)
+
+# ---------------- DIAGNOSTICO ----------------
+with t3:
+    st.subheader("Diagnóstico Automático")
+
+    if gastos > entradas:
+        st.error("Você está gastando mais do que ganha.")
+    else:
+        st.success("Seu fluxo está positivo.")
+
+    if config.salario > 0:
+        perc = (invest/config.salario)*100
+        st.write(f"{perc:.1f}% do seu salário vira patrimônio.")
+
+# ---------------- CONFIG ----------------
+with t4:
+    st.subheader("Editar Sistema")
+
+    nova_cat = st.text_input("Nova Categoria")
+    if st.button("Adicionar Categoria"):
+        conn().execute("INSERT INTO categorias(nome) VALUES (?)",(nova_cat,))
+        conn().commit()
+        st.rerun()
+
+    novo_tipo = st.text_input("Novo Tipo")
+    if st.button("Adicionar Tipo"):
+        conn().execute("INSERT INTO tipos(nome) VALUES (?)",(novo_tipo,))
+        conn().commit()
+        st.rerun()
+
+    salario = st.number_input("Salário", value=float(config.salario))
+    meta = st.number_input("Meta", value=float(config.meta))
+
+    if st.button("Salvar Config"):
+        conn().execute("UPDATE config SET salario=?, meta=? WHERE id=1",(salario,meta))
+        conn().commit()
+        st.rerun()
