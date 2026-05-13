@@ -1,156 +1,98 @@
 import streamlit as st
-import sqlite3
 import pandas as pd
-import plotly.express as px
-from datetime import datetime
+from datetime import date
 
-st.set_page_config("Financeiro PRO", layout="wide")
+st.set_page_config(layout="wide")
 
-DB = "financeiro_pro.db"
+# ---------- FUNÇÕES BASE ----------
 
-# ------------------ DB ------------------
-def conectar():
-    return sqlite3.connect(DB, check_same_thread=False)
+def load_csv(file, cols):
+    try:
+        df = pd.read_csv(file)
+    except:
+        df = pd.DataFrame(columns=cols)
+        df.to_csv(file, index=False)
+    return df
 
-def init_db():
-    conn = conectar()
-    c = conn.cursor()
+def save_csv(df, file):
+    df.to_csv(file, index=False)
 
-    c.execute("""CREATE TABLE IF NOT EXISTS categorias(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT)""")
+# ---------- CARREGAR BASES ----------
 
-    c.execute("""CREATE TABLE IF NOT EXISTS tipos(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT)""")
+receitas = load_csv("receitas.csv", ["data", "descricao", "valor"])
+despesas = load_csv("despesas.csv", ["data", "descricao", "valor"])
+fixos = load_csv("fixos.csv", ["descricao", "valor"])
 
-    c.execute("""CREATE TABLE IF NOT EXISTS lancamentos(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        data TEXT,
-        descricao TEXT,
-        valor REAL,
-        categoria TEXT,
-        tipo TEXT)""")
+# ---------- TÍTULO ----------
 
-    c.execute("""CREATE TABLE IF NOT EXISTS config(
-        id INTEGER PRIMARY KEY,
-        salario REAL,
-        meta REAL)""")
+st.title("💼 Financeiro PRO — Controle Total")
 
-    if c.execute("SELECT COUNT(*) FROM categorias").fetchone()[0] == 0:
-        for x in ["Moradia","Alimentação","Transporte","Lazer","Contas"]:
-            c.execute("INSERT INTO categorias(nome) VALUES (?)",(x,))
+# ---------- CADASTROS ----------
 
-    if c.execute("SELECT COUNT(*) FROM tipos").fetchone()[0] == 0:
-        for x in ["Entrada","Gasto","Investimento"]:
-            c.execute("INSERT INTO tipos(nome) VALUES (?)",(x,))
+st.header("➕ Lançamentos")
 
-    if c.execute("SELECT COUNT(*) FROM config").fetchone()[0] == 0:
-        c.execute("INSERT INTO config VALUES (1,0,10000)")
+col1, col2 = st.columns(2)
 
-    conn.commit()
-    conn.close()
+with col1:
+    st.subheader("Nova Receita")
+    with st.form("form_receita"):
+        data = st.date_input("Data", date.today())
+        desc = st.text_input("Descrição")
+        valor = st.number_input("Valor", min_value=0.0, format="%.2f")
+        if st.form_submit_button("Adicionar Receita"):
+            receitas.loc[len(receitas)] = [data, desc, valor]
+            save_csv(receitas, "receitas.csv")
+            st.success("Receita adicionada!")
 
-init_db()
+with col2:
+    st.subheader("Nova Despesa")
+    with st.form("form_despesa"):
+        data = st.date_input("Data ", date.today())
+        desc = st.text_input("Descrição ")
+        valor = st.number_input("Valor ", min_value=0.0, format="%.2f")
+        if st.form_submit_button("Adicionar Despesa"):
+            despesas.loc[len(despesas)] = [data, desc, valor]
+            save_csv(despesas, "despesas.csv")
+            st.success("Despesa adicionada!")
 
-# ------------------ LOAD ------------------
-conn = conectar()
-df = pd.read_sql("SELECT * FROM lancamentos", conn)
-cats = pd.read_sql("SELECT nome FROM categorias", conn)["nome"].tolist()
-tipos = pd.read_sql("SELECT nome FROM tipos", conn)["nome"].tolist()
-cfg = pd.read_sql("SELECT * FROM config", conn).iloc[0]
-conn.close()
+# ---------- FIXOS ----------
 
-salario = float(cfg["salario"])
-meta = float(cfg["meta"])
+st.header("📌 Compromissos Fixos")
 
-# ------------------ CALCULOS ------------------
-entradas = df[df.tipo=="Entrada"]["valor"].sum()
-gastos = df[df.tipo=="Gasto"]["valor"].sum()
-invest = df[df.tipo=="Investimento"]["valor"].sum()
+with st.form("form_fixo"):
+    desc = st.text_input("Descrição do Fixo")
+    valor = st.number_input("Valor Fixo", min_value=0.0, format="%.2f")
+    if st.form_submit_button("Adicionar Fixo"):
+        fixos.loc[len(fixos)] = [desc, valor]
+        save_csv(fixos, "fixos.csv")
+        st.success("Fixo adicionado!")
 
-caixa = entradas - gastos - invest
-patrimonio = invest
-saldo_total = caixa + patrimonio
+st.dataframe(fixos, use_container_width=True)
 
-# ------------------ HEADER ------------------
-st.title("💎 Financeiro PRO")
+# ---------- PAINEL ----------
 
-c1,c2,c3,c4 = st.columns(4)
-c1.metric("Caixa Atual", f"R$ {caixa:,.2f}")
-c2.metric("Patrimônio", f"R$ {patrimonio:,.2f}")
-c3.metric("Saldo Total", f"R$ {saldo_total:,.2f}")
-c4.metric("Meta", f"R$ {meta:,.2f}")
+st.header("📊 Painel Financeiro")
 
-# ------------------ TABS ------------------
-t1,t2,t3,t4 = st.tabs(["Visão Geral","Lançamentos","Diagnóstico","Configurações"])
+total_receitas = receitas["valor"].sum()
+total_despesas = despesas["valor"].sum()
+total_fixos = fixos["valor"].sum()
 
-# ------------------ VISÃO GERAL ------------------
-with t1:
-    if not df.empty:
-        fig = px.pie(df[df.tipo=="Gasto"], values="valor", names="categoria", title="Para onde vai seu dinheiro")
-        st.plotly_chart(fig, use_container_width=True)
+saldo = total_receitas - (total_despesas + total_fixos)
 
-# ------------------ LANÇAMENTOS ------------------
-with t2:
-    st.subheader("Novo Lançamento")
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Receitas", f"R$ {total_receitas:,.2f}")
+c2.metric("Despesas", f"R$ {total_despesas:,.2f}")
+c3.metric("Fixos", f"R$ {total_fixos:,.2f}")
+c4.metric("Saldo", f"R$ {saldo:,.2f}")
 
-    desc = st.text_input("Descrição")
-    valor = st.number_input("Valor",0.0)
-    cat = st.selectbox("Categoria", cats)
-    tipo = st.selectbox("Tipo", tipos)
+# ---------- TABELAS EDITÁVEIS ----------
 
-    if st.button("Salvar"):
-        conn = conectar()
-        conn.execute(
-            "INSERT INTO lancamentos(data,descricao,valor,categoria,tipo) VALUES (?,?,?,?,?)",
-            (datetime.now().strftime("%Y-%m-%d %H:%M"),desc,valor,cat,tipo)
-        )
-        conn.commit()
-        conn.close()
-        st.rerun()
+st.header("📝 Editar Dados")
 
-    st.dataframe(df, use_container_width=True)
+st.subheader("Receitas")
+edit_r = st.data_editor(receitas, num_rows="dynamic")
+save_csv(edit_r, "receitas.csv")
 
-# ------------------ DIAGNOSTICO ------------------
-with t3:
-    st.subheader("Diagnóstico Automático")
-
-    if gastos > entradas:
-        st.error("Você está gastando mais do que ganha.")
-    else:
-        st.success("Seu fluxo financeiro está positivo.")
-
-    if salario > 0:
-        perc = (invest/salario)*100
-        st.write(f"{perc:.1f}% do seu salário está virando patrimônio.")
-
-# ------------------ CONFIG ------------------
-with t4:
-    st.subheader("Sistema 100% Editável")
-
-    nova_cat = st.text_input("Nova Categoria")
-    if st.button("Adicionar Categoria"):
-        conn = conectar()
-        conn.execute("INSERT INTO categorias(nome) VALUES (?)",(nova_cat,))
-        conn.commit()
-        conn.close()
-        st.rerun()
-
-    novo_tipo = st.text_input("Novo Tipo")
-    if st.button("Adicionar Tipo"):
-        conn = conectar()
-        conn.execute("INSERT INTO tipos(nome) VALUES (?)",(novo_tipo,))
-        conn.commit()
-        conn.close()
-        st.rerun()
-
-    novo_salario = st.number_input("Salário", value=salario)
-    nova_meta = st.number_input("Meta", value=meta)
-
-    if st.button("Salvar Configurações"):
-        conn = conectar()
-        conn.execute("UPDATE config SET salario=?, meta=? WHERE id=1",(novo_salario,nova_meta))
-        conn.commit()
-        conn.close()
-        st.rerun()
+st.subheader("Despesas")
+edit_d = st.data_editor(despesas, num_rows="dynamic")
+save_csv(edit_d, "despesas.csv")
