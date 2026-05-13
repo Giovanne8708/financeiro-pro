@@ -4,67 +4,88 @@ import sqlite3
 import plotly.express as px
 from datetime import datetime
 
-# =========================
-# CONFIGURAÇÃO DA PÁGINA
-# =========================
+# =====================================================
+# CONFIG
+# =====================================================
 st.set_page_config(
     page_title="Finances and Economy",
     layout="wide",
-    page_icon="📈"
+    page_icon="💰"
 )
 
-# =========================
-# ESTILO VISUAL
-# =========================
+# =====================================================
+# ESTILO
+# =====================================================
 st.markdown("""
 <style>
-    [data-testid="stSidebar"] {
-        display: none;
-    }
 
-    .stApp {
-        background: #0f172a;
-        color: white;
-    }
+[data-testid="stSidebar"]{
+    display:none;
+}
 
-    div[data-testid="stMetric"] {
-        background: #1e293b;
-        border: 1px solid #334155;
-        padding: 20px;
-        border-radius: 20px;
-    }
+.stApp{
+    background:#0f172a;
+    color:white;
+}
 
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-    }
+div[data-testid="stMetric"]{
+    background:#1e293b;
+    border:1px solid #334155;
+    padding:20px;
+    border-radius:18px;
+}
 
-    .stTabs [data-baseweb="tab"] {
-        background: #1e293b;
-        border-radius: 12px;
-        color: white;
-        padding: 10px;
-    }
+.stTabs [data-baseweb="tab"]{
+    background:#1e293b;
+    border-radius:12px;
+    color:white;
+    padding:10px;
+}
+
+.stButton button{
+    border-radius:12px;
+    background:#2563eb;
+    color:white;
+    border:none;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
-# =========================
-# BANCO DE DADOS
-# =========================
+# =====================================================
+# DATABASE
+# =====================================================
+DB = "financeiro_pro.db"
+
+
+def conectar():
+    return sqlite3.connect(DB, check_same_thread=False)
+
+
 def init_db():
-    conn = sqlite3.connect("financeiro_pro.db")
+    conn = conectar()
     c = conn.cursor()
 
-    # Tabela patrimônio
+    # CONFIG USER
     c.execute("""
-    CREATE TABLE IF NOT EXISTS patrimonio (
+    CREATE TABLE IF NOT EXISTS config (
         id INTEGER PRIMARY KEY,
-        saldo REAL DEFAULT 0,
-        cdb REAL DEFAULT 0,
-        reserva_meta REAL DEFAULT 10000
+        nome TEXT,
+        meta_reserva REAL,
+        salario_mensal REAL
     )
     """)
 
-    # Tabela movimentações
+    # PATRIMONIO
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS patrimonio (
+        id INTEGER PRIMARY KEY,
+        saldo REAL,
+        investimentos REAL
+    )
+    """)
+
+    # MOVIMENTAÇÕES
     c.execute("""
     CREATE TABLE IF NOT EXISTS mov (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,40 +97,44 @@ def init_db():
     )
     """)
 
-    # Verifica se existe registro
-    c.execute("SELECT COUNT(*) FROM patrimonio")
-
+    # DEFAULT CONFIG
+    c.execute("SELECT COUNT(*) FROM config")
     if c.fetchone()[0] == 0:
         c.execute("""
-        INSERT INTO patrimonio (id, saldo, cdb, reserva_meta)
-        VALUES (1, 0, 0, 10000)
+        INSERT INTO config
+        VALUES (1,'Usuário',10000,0)
         """)
 
-    # GARANTE que a coluna exista
-    c.execute("PRAGMA table_info(patrimonio)")
-    colunas = [col[1] for col in c.fetchall()]
-
-    if "reserva_meta" not in colunas:
+    # DEFAULT PATRIMONIO
+    c.execute("SELECT COUNT(*) FROM patrimonio")
+    if c.fetchone()[0] == 0:
         c.execute("""
-        ALTER TABLE patrimonio
-        ADD COLUMN reserva_meta REAL DEFAULT 10000
+        INSERT INTO patrimonio
+        VALUES (1,0,0)
         """)
 
     conn.commit()
     conn.close()
 
+
 init_db()
 
-# =========================
-# CARREGAR DADOS
-# =========================
-def carregar_dados():
-    conn = sqlite3.connect("financeiro_pro.db")
+# =====================================================
+# LOAD DATA
+# =====================================================
+def carregar():
+
+    conn = conectar()
+
+    config = pd.read_sql(
+        "SELECT * FROM config WHERE id=1",
+        conn
+    ).iloc[0]
 
     patrimonio = pd.read_sql(
-        "SELECT * FROM patrimonio WHERE id = 1",
+        "SELECT * FROM patrimonio WHERE id=1",
         conn
-    )
+    ).iloc[0]
 
     mov = pd.read_sql(
         "SELECT * FROM mov ORDER BY id DESC",
@@ -118,226 +143,397 @@ def carregar_dados():
 
     conn.close()
 
-    # Segurança extra
-    if patrimonio.empty:
-        patrimonio = pd.DataFrame([{
-            "id": 1,
-            "saldo": 0,
-            "cdb": 0,
-            "reserva_meta": 10000
-        }])
+    return config, patrimonio, mov
 
-    p = patrimonio.iloc[0]
 
-    return p, mov
+config, p, m = carregar()
 
-# =========================
+# =====================================================
 # LOGIN
-# =========================
+# =====================================================
 if "auth" not in st.session_state:
     st.session_state.auth = False
 
 if not st.session_state.auth:
 
     st.markdown(
-        "<h1 style='text-align:center;'>📊 Finances and Economy</h1>",
+        "<h1 style='text-align:center;'>💰 Finances and Economy</h1>",
         unsafe_allow_html=True
     )
 
-    user = st.text_input("Usuário")
+    usuario = st.text_input("Usuário")
     senha = st.text_input("Senha", type="password")
 
     if st.button("Entrar", use_container_width=True):
 
-        if user == "giovanne" and senha == "8708":
+        if usuario == "giovanne" and senha == "8708":
             st.session_state.auth = True
             st.rerun()
         else:
-            st.error("Usuário ou senha inválidos")
+            st.error("Usuário inválido")
 
     st.stop()
 
-# =========================
-# DADOS
-# =========================
-p, m = carregar_dados()
+# =====================================================
+# HEADER
+# =====================================================
+st.title(f"📈 Painel Financeiro - {config['nome']}")
 
-# =========================
-# TOPO
-# =========================
-st.title("📈 Finances and Economy")
+saldo = float(p["saldo"])
+investimentos = float(p["investimentos"])
+meta = float(config["meta_reserva"])
 
-c1, c2, c3 = st.columns(3)
+rendimento = investimentos * 0.0004
+
+# =====================================================
+# METRICS
+# =====================================================
+c1, c2, c3, c4 = st.columns(4)
 
 c1.metric(
-    "Saldo Disponível",
-    f"R$ {p['saldo']:,.2f}"
+    "💵 Saldo",
+    f"R$ {saldo:,.2f}"
 )
 
 c2.metric(
-    "Reserva CDB (Inter)",
-    f"R$ {p['cdb']:,.2f}"
+    "📈 Investimentos",
+    f"R$ {investimentos:,.2f}"
 )
-
-rend_estimado = p["cdb"] * 0.0004
 
 c3.metric(
-    "Rendimento Previsto Hoje",
-    f"R$ {rend_estimado:,.2f}"
+    "🎯 Meta",
+    f"R$ {meta:,.2f}"
 )
 
-# =========================
+c4.metric(
+    "💸 Rendimento Diário",
+    f"R$ {rendimento:,.2f}"
+)
+
+# =====================================================
 # TABS
-# =========================
-tab1, tab2, tab3 = st.tabs([
+# =====================================================
+tab1, tab2, tab3, tab4 = st.tabs([
     "💎 Gestão",
     "📊 Evolução",
-    "🎯 Metas"
+    "🎯 Metas",
+    "⚙️ Configurações"
 ])
 
-# =========================
-# ABA 1
-# =========================
+# =====================================================
+# GESTÃO
+# =====================================================
 with tab1:
 
     st.subheader("Novo Lançamento")
 
-    col_a, col_b = st.columns(2)
+    col1, col2 = st.columns(2)
 
-    with col_a:
-        desc = st.text_input("Descrição")
+    with col1:
+
+        descricao = st.text_input("Descrição")
+
         valor = st.number_input(
-            "Valor (R$)",
+            "Valor",
             min_value=0.0,
             format="%.2f"
         )
 
-    with col_b:
+    with col2:
+
         tipo = st.selectbox(
             "Tipo",
-            ["Gasto", "Entrada", "Investimento"]
-        )
-
-        cat = st.selectbox(
-            "Categoria",
             [
-                "Alimentação",
-                "Lazer",
-                "Contas Fixas",
-                "Salário",
-                "Bet",
-                "Outros"
+                "Gasto",
+                "Entrada",
+                "Investimento"
             ]
         )
 
-    if st.button("Confirmar", use_container_width=True):
+        # TOTALMENTE EDITÁVEL
+        categorias_padrao = [
+            "Alimentação",
+            "Lazer",
+            "Transporte",
+            "Contas",
+            "Salário",
+            "Investimento",
+            "Outros"
+        ]
 
-        conn = sqlite3.connect("financeiro_pro.db")
-        cur = conn.cursor()
+        categoria = st.selectbox(
+            "Categoria",
+            categorias_padrao
+        )
 
-        cur.execute("""
+    if st.button("Salvar Lançamento", use_container_width=True):
+
+        conn = conectar()
+        c = conn.cursor()
+
+        c.execute("""
         INSERT INTO mov
         (data, descricao, valor, categoria, tipo)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (?,?,?,?,?)
         """, (
-            datetime.now().strftime("%Y-%m-%d"),
-            desc,
+            datetime.now().strftime("%Y-%m-%d %H:%M"),
+            descricao,
             valor,
-            cat,
+            categoria,
             tipo
         ))
 
-        if tipo == "Gasto":
-            cur.execute("""
-            UPDATE patrimonio
-            SET saldo = saldo - ?
-            WHERE id = 1
-            """, (valor,))
-
-        elif tipo == "Entrada":
-            cur.execute("""
+        # ATUALIZA SALDO
+        if tipo == "Entrada":
+            c.execute("""
             UPDATE patrimonio
             SET saldo = saldo + ?
-            WHERE id = 1
+            WHERE id=1
+            """, (valor,))
+
+        elif tipo == "Gasto":
+            c.execute("""
+            UPDATE patrimonio
+            SET saldo = saldo - ?
+            WHERE id=1
             """, (valor,))
 
         elif tipo == "Investimento":
-            cur.execute("""
+
+            c.execute("""
             UPDATE patrimonio
             SET saldo = saldo - ?,
-                cdb = cdb + ?
-            WHERE id = 1
+                investimentos = investimentos + ?
+            WHERE id=1
             """, (valor, valor))
 
         conn.commit()
         conn.close()
 
-        st.success("Dados atualizados com sucesso!")
+        st.success("Lançamento salvo!")
         st.rerun()
 
-# =========================
-# ABA 2
-# =========================
-with tab2:
+    st.divider()
+
+    st.subheader("Editar / Excluir Lançamentos")
 
     if not m.empty:
 
-        st.subheader("Análise Econômica")
+        id_escolhido = st.selectbox(
+            "Selecione o ID",
+            m["id"]
+        )
 
-        gastos_df = m[m["tipo"] == "Gasto"]
+        registro = m[m["id"] == id_escolhido].iloc[0]
 
-        if not gastos_df.empty:
+        nova_desc = st.text_input(
+            "Descrição",
+            registro["descricao"]
+        )
 
-            fig = px.pie(
-                gastos_df,
+        novo_valor = st.number_input(
+            "Valor Atualizado",
+            value=float(registro["valor"])
+        )
+
+        if st.button("Atualizar Registro"):
+
+            conn = conectar()
+            c = conn.cursor()
+
+            c.execute("""
+            UPDATE mov
+            SET descricao=?,
+                valor=?
+            WHERE id=?
+            """, (
+                nova_desc,
+                novo_valor,
+                id_escolhido
+            ))
+
+            conn.commit()
+            conn.close()
+
+            st.success("Registro atualizado!")
+            st.rerun()
+
+        if st.button("Excluir Registro"):
+
+            conn = conectar()
+            c = conn.cursor()
+
+            c.execute("""
+            DELETE FROM mov
+            WHERE id=?
+            """, (id_escolhido,))
+
+            conn.commit()
+            conn.close()
+
+            st.success("Registro removido!")
+            st.rerun()
+
+# =====================================================
+# EVOLUÇÃO
+# =====================================================
+with tab2:
+
+    st.subheader("Dashboard Financeiro")
+
+    if not m.empty:
+
+        # PIE
+        gastos = m[m["tipo"] == "Gasto"]
+
+        if not gastos.empty:
+
+            fig1 = px.pie(
+                gastos,
                 values="valor",
                 names="categoria",
                 hole=0.5,
                 title="Distribuição de Gastos"
             )
 
-            fig.update_layout(
+            fig1.update_layout(
                 paper_bgcolor='rgba(0,0,0,0)',
                 font_color='white'
             )
 
             st.plotly_chart(
-                fig,
+                fig1,
                 use_container_width=True
             )
 
-        st.write("### Histórico")
+        # HISTÓRICO
+        fig2 = px.line(
+            m.sort_values("id"),
+            x="data",
+            y="valor",
+            color="tipo",
+            title="Fluxo Financeiro"
+        )
+
+        fig2.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)',
+            font_color='white'
+        )
+
+        st.plotly_chart(
+            fig2,
+            use_container_width=True
+        )
+
+        st.subheader("Histórico Completo")
+
         st.dataframe(
             m,
             use_container_width=True
         )
 
     else:
-        st.info("Sem dados registrados.")
+        st.info("Nenhum dado cadastrado.")
 
-# =========================
-# ABA 3
-# =========================
+# =====================================================
+# METAS
+# =====================================================
 with tab3:
 
     st.subheader("Reserva de Emergência")
 
-    meta = float(p.get("reserva_meta", 10000))
-    cdb = float(p.get("cdb", 0))
-
-    # Evita divisão por zero
     if meta <= 0:
         meta = 1
 
-    progresso = min(cdb / meta, 1.0)
+    progresso = min(investimentos / meta, 1.0)
 
-    st.write(f"Alvo: R$ {meta:,.2f}")
+    st.write(f"Meta Atual: R$ {meta:,.2f}")
 
     st.progress(progresso)
 
     st.write(
-        f"{progresso * 100:.1f}% da meta atingida"
+        f"{progresso*100:.1f}% concluído"
     )
+
+    nova_meta = st.number_input(
+        "Alterar Meta",
+        value=float(meta)
+    )
+
+    if st.button("Salvar Nova Meta"):
+
+        conn = conectar()
+        c = conn.cursor()
+
+        c.execute("""
+        UPDATE config
+        SET meta_reserva=?
+        WHERE id=1
+        """, (nova_meta,))
+
+        conn.commit()
+        conn.close()
+
+        st.success("Meta atualizada!")
+        st.rerun()
+
+# =====================================================
+# CONFIG
+# =====================================================
+with tab4:
+
+    st.subheader("Configurações do Usuário")
+
+    novo_nome = st.text_input(
+        "Nome do Usuário",
+        config["nome"]
+    )
+
+    novo_salario = st.number_input(
+        "Salário Mensal",
+        value=float(config["salario_mensal"])
+    )
+
+    saldo_manual = st.number_input(
+        "Editar Saldo Manualmente",
+        value=float(saldo)
+    )
+
+    investimento_manual = st.number_input(
+        "Editar Investimentos",
+        value=float(investimentos)
+    )
+
+    if st.button("Salvar Configurações", use_container_width=True):
+
+        conn = conectar()
+        c = conn.cursor()
+
+        c.execute("""
+        UPDATE config
+        SET nome=?,
+            salario_mensal=?
+        WHERE id=1
+        """, (
+            novo_nome,
+            novo_salario
+        ))
+
+        c.execute("""
+        UPDATE patrimonio
+        SET saldo=?,
+            investimentos=?
+        WHERE id=1
+        """, (
+            saldo_manual,
+            investimento_manual
+        ))
+
+        conn.commit()
+        conn.close()
+
+        st.success("Configurações atualizadas!")
+        st.rerun()
 
     st.divider()
 
