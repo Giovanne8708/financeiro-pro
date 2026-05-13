@@ -1,185 +1,131 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
-import hashlib
 import plotly.express as px
 from datetime import datetime
 
-# =========================================================
-# CONFIGURAÇÃO E BANCO DE DADOS
-# =========================================================
-st.set_page_config(page_title="Financeiro Pro", layout="wide", page_icon="💰")
+# --- CONFIGURAÇÃO VISUAL ---
+st.set_page_config(page_title="Finances and Economy", layout="wide", page_icon="📈")
 
-def conectar():
-    conn = sqlite3.connect('financeiro_pro.db', check_same_thread=False)
-    return conn
+# Estilo Dark Mode Premium para Celular
+st.markdown("""
+    <style>
+        [data-testid="stSidebar"] {display: none;}
+        .stApp {background: #0f172a; color: white;}
+        div[data-testid="stMetric"] {
+            background: #1e293b;
+            border: 1px solid #334155;
+            padding: 20px;
+            border-radius: 20px;
+        }
+        .stTabs [data-baseweb="tab-list"] { gap: 8px; }
+        .stTabs [data-baseweb="tab"] {
+            background: #1e293b;
+            border-radius: 12px;
+            color: white;
+            padding: 10px;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
+# --- BANCO DE DADOS ---
 def init_db():
-    conn = conectar()
+    conn = sqlite3.connect('financeiro_pro.db')
     c = conn.cursor()
-    # Tabela de Saldo e Investimentos
-    c.execute('''CREATE TABLE IF NOT EXISTS patrimonio 
-                 (id INTEGER PRIMARY KEY, saldo REAL, cdb REAL, tesouro REAL)''')
-    # Tabela de Movimentações
-    c.execute('''CREATE TABLE IF NOT EXISTS mov 
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT, desc TEXT, valor REAL, cat TEXT, tipo TEXT)''')
-    
-    # Inicializa patrimônio se vazio
+    c.execute('''CREATE TABLE IF NOT EXISTS patrimonio (id int primary key, saldo real, cdb real, reserva_meta real)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS mov (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT, desc TEXT, valor REAL, cat TEXT, tipo TEXT)''')
     c.execute("SELECT COUNT(*) FROM patrimonio")
     if c.fetchone()[0] == 0:
-        c.execute("INSERT INTO patrimonio VALUES (1, 0.0, 0.0, 0.0)")
-    
+        c.execute("INSERT INTO patrimonio VALUES (1, 0.0, 0.0, 10000.0)") # Meta padrão 10k
     conn.commit()
     conn.close()
 
 init_db()
 
-# =========================================================
-# ESTILIZAÇÃO PREMIUM (CSS)
-# =========================================================
-st.markdown("""
-<style>
-    .stApp { background: #0f172a; color: white; }
-    [data-testid="stMetric"] {
-        background: #1e293b;
-        border: 1px solid #334155;
-        padding: 15px;
-        border-radius: 15px;
-    }
-    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    .stTabs [data-baseweb="tab"] {
-        background: #1e293b;
-        border-radius: 10px;
-        padding: 10px 20px;
-        color: white;
-    }
-    .card-mov {
-        background: #1e293b;
-        padding: 15px;
-        border-radius: 12px;
-        border-left: 5px solid #3b82f6;
-        margin-bottom: 10px;
-    }
-</style>
-""", unsafe_allow_html=True)
+def carregar_dados():
+    conn = sqlite3.connect('financeiro_pro.db')
+    p = pd.read_sql("SELECT * FROM patrimonio WHERE id=1", conn).iloc[0]
+    m = pd.read_sql("SELECT * FROM mov ORDER BY id DESC", conn)
+    conn.close()
+    return p, m
 
-# =========================================================
-# AUTENTICAÇÃO
-# =========================================================
-if "auth" not in st.session_state:
-    st.session_state.auth = False
-
+# --- AUTENTICAÇÃO ---
+if "auth" not in st.session_state: st.session_state.auth = False
 if not st.session_state.auth:
-    st.markdown("<h1 style='text-align:center;'>🔐 Financeiro Pro</h1>", unsafe_allow_html=True)
-    user = st.text_input("Usuário")
-    password = st.text_input("Senha", type="password")
-    if st.button("Entrar", use_container_width=True):
-        if user == "giovanne" and password == "8708":
-            st.session_state.auth = True
-            st.rerun()
-        else:
-            st.error("Dados incorretos")
+    st.markdown("<h1 style='text-align:center;'>📊 Finances and Economy</h1>", unsafe_allow_html=True)
+    with st.container():
+        user = st.text_input("Usuário")
+        senha = st.text_input("Senha", type="password")
+        if st.button("Entrar", use_container_width=True):
+            if user == "giovanne" and senha == "8708":
+                st.session_state.auth = True
+                st.rerun()
     st.stop()
 
-# =========================================================
-# LÓGICA DE DADOS
-# =========================================================
-def get_patrimonio():
-    conn = conectar()
-    df = pd.read_sql("SELECT * FROM patrimonio WHERE id=1", conn)
-    conn.close()
-    return df.iloc[0]
-
-def add_mov(desc, valor, cat, tipo):
-    conn = conectar()
-    c = conn.cursor()
-    data = datetime.now().strftime("%Y-%m-%d %H:%M")
-    c.execute("INSERT INTO mov (data, desc, valor, cat, tipo) VALUES (?,?,?,?,?)",
-              (data, desc, valor, cat, tipo))
-    # Atualiza saldo se for gasto ou entrada
-    if tipo == "Gasto":
-        c.execute("UPDATE patrimonio SET saldo = saldo - ? WHERE id=1", (valor,))
-    elif tipo == "Entrada":
-        c.execute("UPDATE patrimonio SET saldo = saldo + ? WHERE id=1", (valor,))
-    conn.commit()
-    conn.close()
-
-patrimonio = get_patrimonio()
-
-# =========================================================
-# INTERFACE PRINCIPAL
-# =========================================================
-st.title("💰 Financeiro Pro")
+# --- INTERFACE ---
+p, m = carregar_dados()
+st.title("📈 Finances and Economy")
 
 # Métricas Principais
-m1, m2, m3 = st.columns(3)
-m1.metric("Saldo em Conta", f"R$ {patrimonio['saldo']:,.2f}")
-m2.metric("Investido (CDB)", f"R$ {patrimonio['cdb']:,.2f}")
-# Projeção simples de 1% ao mês no CDB
-projecao = patrimonio['cdb'] * 0.00033 # aprox rendimento diário
-m3.metric("Rendimento Hoje (Est.)", f"R$ {projecao:,.2f}", delta_color="normal")
+c1, c2, c3 = st.columns(3)
+c1.metric("Saldo Disponível", f"R$ {p['saldo']:,.2f}")
+c2.metric("Reserva CDB (Inter)", f"R$ {p['cdb']:,.2f}")
+# Projeção baseada em 100% do CDI (aprox. 0.04% ao dia útil)
+rend_estimado = p['cdb'] * 0.0004
+c3.metric("Rendimento Previsto Hoje", f"R$ {rend_estimado:,.2f}")
 
-tab1, tab2, tab3 = st.tabs(["💸 Lançamentos", "📊 Dashboards", "🏦 Gestão"])
+tab1, tab2, tab3 = st.tabs(["💎 Gestão", "📊 Evolução", "🎯 Metas"])
 
 with tab1:
-    st.subheader("Novo Registro")
+    st.subheader("Novo Lançamento")
     col_a, col_b = st.columns(2)
     with col_a:
-        desc = st.text_input("Descrição")
-        valor = st.number_input("Valor", min_value=0.0)
+        desc = st.text_input("Descrição do Gasto/Ganho")
+        valor = st.number_input("Valor (R$)", min_value=0.0)
     with col_b:
-        tipo = st.selectbox("Tipo", ["Gasto", "Entrada"])
-        cat = st.selectbox("Categoria", ["Alimentação", "Transporte", "Lazer", "Serviços", "Salário", "Bet"])
+        tipo = st.selectbox("Tipo de Fluxo", ["Gasto", "Entrada", "Investimento"])
+        cat = st.selectbox("Categoria", ["Alimentação", "Lazer", "Contas Fixas", "Salário", "Bet", "Outros"])
     
-    if st.button("Confirmar Lançamento", use_container_width=True):
-        if desc and valor > 0:
-            add_mov(desc, valor, cat, tipo)
-            st.success("Registrado com sucesso!")
-            st.rerun()
-
-with tab2:
-    st.subheader("Análise de Gastos")
-    conn = conectar()
-    df_mov = pd.read_sql("SELECT * FROM mov ORDER BY id DESC", conn)
-    conn.close()
-    
-    if not df_mov.empty:
-        fig = px.pie(df_mov[df_mov['tipo']=='Gasto'], values='valor', names='cat', 
-                     title="Distribuição por Categoria", hole=0.4,
-                     color_discrete_sequence=px.colors.sequential.RdBu)
-        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color='white')
-        st.plotly_chart(fig, use_container_width=True)
+    if st.button("Confirmar", use_container_width=True):
+        conn = sqlite3.connect('financeiro_pro.db')
+        cur = conn.cursor()
+        cur.execute("INSERT INTO mov (data, desc, valor, cat, tipo) VALUES (?,?,?,?,?)", 
+                    (datetime.now().strftime("%Y-%m-%d"), desc, valor, cat, tipo))
         
-        st.write("### Últimas Movimentações")
-        for _, row in df_mov.head(10).iterrows():
-            cor = "#ef4444" if row['tipo'] == "Gasto" else "#22c55e"
-            st.markdown(f"""
-                <div class="card-mov" style="border-left-color: {cor}">
-                    <div style="display:flex; justify-content:space-between;">
-                        <b>{row['desc']}</b>
-                        <span>{row['data']}</span>
-                    </div>
-                    <div style="font-size: 20px; font-weight: bold; color: {cor}">
-                        {' - ' if row['tipo'] == "Gasto" else ' + '} R$ {row['valor']:,.2f}
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-
-with tab3:
-    st.subheader("Ajuste de Patrimônio")
-    new_saldo = st.number_input("Corrigir Saldo Bancário", value=patrimonio['saldo'])
-    new_cdb = st.number_input("Total no CDB (Inter)", value=patrimonio['cdb'])
-    
-    if st.button("Atualizar Banco", use_container_width=True):
-        conn = conectar()
-        c = conn.cursor()
-        c.execute("UPDATE patrimonio SET saldo=?, cdb=? WHERE id=1", (new_saldo, new_cdb))
+        if tipo == "Gasto":
+            cur.execute("UPDATE patrimonio SET saldo = saldo - ? WHERE id=1", (valor,))
+        elif tipo == "Entrada":
+            cur.execute("UPDATE patrimonio SET saldo = saldo + ? WHERE id=1", (valor,))
+        elif tipo == "Investimento":
+            cur.execute("UPDATE patrimonio SET saldo = saldo - ?, cdb = cdb + ? WHERE id=1", (valor, valor))
+            
         conn.commit()
         conn.close()
+        st.success("Dados atualizados!")
         st.rerun()
 
-# Sidebar para Sair
-with st.sidebar:
-    if st.button("🚪 Sair"):
+with tab2:
+    if not m.empty:
+        st.subheader("Análise Econômica")
+        gastos_df = m[m['tipo']=='Gasto']
+        if not gastos_df.empty:
+            fig = px.pie(gastos_df, values='valor', names='cat', hole=0.5, title="Distribuição de Gastos")
+            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+            st.plotly_chart(fig, use_container_width=True)
+        
+        st.write("### Histórico")
+        st.dataframe(m, use_container_width=True)
+    else:
+        st.info("Sem dados registrados.")
+
+with tab3:
+    st.subheader("Reserva de Emergência")
+    progresso = min(p['cdb'] / p['reserva_meta'], 1.0)
+    st.write(f"Alvo: R$ {p['reserva_meta']:,.2f}")
+    st.progress(progresso)
+    st.write(f"{progresso*100:.1f}% da meta atingida")
+    
+    st.divider()
+    if st.button("Sair do Sistema"):
         st.session_state.auth = False
         st.rerun()
