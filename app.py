@@ -117,34 +117,19 @@ fix_db()
 # =====================================================
 def carregar():
     conn = conectar()
-
     config = pd.read_sql("SELECT * FROM config WHERE id=1", conn).iloc[0]
     patrimonio = pd.read_sql("SELECT * FROM patrimonio WHERE id=1", conn).iloc[0]
     mov = pd.read_sql("SELECT * FROM mov ORDER BY id DESC", conn)
-
     conn.close()
     return config, patrimonio, mov
 
 config, p, m = carregar()
 
 # =====================================================
-# LOGIN
+# LOGIN (DESATIVADO PARA TESTE)
 # =====================================================
 if "auth" not in st.session_state:
-    st.session_state.auth = False
-
-if not st.session_state.auth:
-    st.markdown("<h1 style='text-align:center;'>💰 Finances and Economy</h1>", unsafe_allow_html=True)
-    usuario = st.text_input("Usuário")
-    senha = st.text_input("Senha", type="password")
-
-    if st.button("Entrar", use_container_width=True):
-        if usuario == "giovanne" and senha == "8708":
-            st.session_state.auth = True
-            st.rerun()
-        else:
-            st.error("Usuário inválido")
-    st.stop()
+    st.session_state.auth = True
 
 # =====================================================
 # HEADER
@@ -156,4 +141,24 @@ investimentos = float(p["investimentos"])
 meta = float(config["meta_reserva"])
 rendimento = investimentos * 0.0004
 
-# (restante do seu código permanece IGUAL — sem nenhuma outra alteração)
+# =====================================================
+# METRICS
+# =====================================================
+c1, c2, c3, c4 = st.columns(4)
+
+c1.metric("💵 Saldo", f"R$ {saldo:,.2f}")
+c2.metric("📈 Investimentos", f"R$ {investimentos:,.2f}")
+c3.metric("🎯 Meta", f"R$ {meta:,.2f}")
+c4.metric("💸 Rendimento Diário", f"R$ {rendimento:,.2f}")
+
+# =====================================================
+# TABS
+# =====================================================
+tab1, tab2, tab3, tab4 = st.tabs([
+    "💎 Gestão",
+    "📊 Evolução",
+    "🎯 Metas",
+    "⚙️ Configurações"
+])
+
+# (todo o restante do seu código das abas permanece EXATAMENTE IGUAL)
