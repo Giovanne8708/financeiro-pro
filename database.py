@@ -1,54 +1,16 @@
-python
 import sqlite3
 
-conn = sqlite3.connect(
-    'dados.db',
-    check_same_thread=False
-)
+def init_db():
+    conn = sqlite3.connect('dados.db')
+    c = conn.cursor()
+    # Tabela de usuários
+    c.execute('''CREATE TABLE IF NOT EXISTS users 
+                 (username TEXT PRIMARY KEY, password TEXT)''')
+    # Tabela de finanças
+    c.execute('''CREATE TABLE IF NOT EXISTS transacoes 
+                 (id INTEGER PRIMARY KEY, tipo TEXT, valor REAL, data TEXT, categoria TEXT)''')
+    conn.commit()
+    conn.close()
 
-cursor = conn.cursor()
-
-# =========================================
-# TABELA USUÁRIOS
-# =========================================
-
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS usuarios(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    usuario TEXT,
-    senha TEXT
-)
-''')
-
-# =========================================
-# TABELA GASTOS
-# =========================================
-
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS gastos(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    usuario TEXT,
-    descricao TEXT,
-    categoria TEXT,
-    valor REAL,
-    data TEXT
-)
-''')
-
-# =========================================
-# TABELA INVESTIMENTOS
-# =========================================
-
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS investimentos(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    usuario TEXT,
-    tipo TEXT,
-    valor REAL
-)
-''')
-
-conn.commit()
-
-
----
+if __name__ == "__main__":
+    init_db()
