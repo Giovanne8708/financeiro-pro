@@ -2,163 +2,159 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import plotly.express as px
-from datetime import datetime
+from datetime import datetime, timedelta
 
-# =====================================================
-# CONFIG
-# =====================================================
-st.set_page_config(
-    page_title="Finances and Economy",
-    layout="wide",
-    page_icon="💰"
-)
+# =========================================================
+# CONFIGURAÇÃO DE ELITE
+# =========================================================
+st.set_page_config(page_title="Financeiro Pro", layout="wide", page_icon="📈")
 
-# =====================================================
-# ESTILO
-# =====================================================
+# CSS para esconder o menu lateral e criar cards modernos
 st.markdown("""
-<style>
-[data-testid="stSidebar"]{ display:none; }
-.stApp{ background:#0f172a; color:white; }
-div[data-testid="stMetric"]{
-    background:#1e293b;
-    border:1px solid #334155;
-    padding:20px;
-    border-radius:18px;
-}
-.stTabs [data-baseweb="tab"]{
-    background:#1e293b;
-    border-radius:12px;
-    color:white;
-    padding:10px;
-}
-.stButton button{
-    border-radius:12px;
-    background:#2563eb;
-    color:white;
-    border:none;
-}
-</style>
+    <style>
+        [data-testid="stSidebar"] { display: none; }
+        .stApp { background: #0f172a; }
+        .metric-card {
+            background: #1e293b;
+            padding: 20px;
+            border-radius: 15px;
+            border: 1px solid #334155;
+            text-align: center;
+        }
+    </style>
 """, unsafe_allow_html=True)
 
-# =====================================================
-# DATABASE
-# =====================================================
-DB = "financeiro_pro.db"
-
-def conectar():
-    return sqlite3.connect(DB, check_same_thread=False)
-
+# =========================================================
+# BANCO DE DADOS PROFISSIONAL
+# =========================================================
 def init_db():
-    conn = conectar()
+    conn = sqlite3.connect('financeiro_pro.db')
     c = conn.cursor()
-
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS config (
-        id INTEGER PRIMARY KEY,
-        nome TEXT,
-        meta_reserva REAL,
-        salario_mensal REAL
-    )
-    """)
-
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS patrimonio (
-        id INTEGER PRIMARY KEY,
-        saldo REAL,
-        investimentos REAL
-    )
-    """)
-
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS mov (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        data TEXT,
-        descricao TEXT,
-        valor REAL,
-        categoria TEXT,
-        tipo TEXT
-    )
-    """)
-
-    c.execute("SELECT COUNT(*) FROM config")
+    # Tabela de Saldo e Investimentos
+    c.execute('''CREATE TABLE IF NOT EXISTS status (id int primary key, saldo real, cdb real)''')
+    # Tabela de Movimentações (Entradas, Gastos, Apostas)
+    c.execute('''CREATE TABLE IF NOT EXISTS movs (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT, desc TEXT, valor REAL, cat TEXT, tipo TEXT)''')
+    # Tabela de Metas
+    c.execute('''CREATE TABLE IF NOT EXISTS metas (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, alvo REAL)''')
+    
+    c.execute("SELECT COUNT(*) FROM status")
     if c.fetchone()[0] == 0:
-        c.execute("INSERT INTO config VALUES (1,'Usuário',10000,0)")
-
-    c.execute("SELECT COUNT(*) FROM patrimonio")
-    if c.fetchone()[0] == 0:
-        c.execute("INSERT INTO patrimonio VALUES (1,0,0)")
-
+        c.execute("INSERT INTO status VALUES (1, 0.0, 0.0)")
     conn.commit()
     conn.close()
 
 init_db()
 
-# =====================================================
-# FIX ESTRUTURA DO BANCO (MIGRATION AUTOMÁTICA)
-# =====================================================
-def fix_db():
-    conn = conectar()
-    c = conn.cursor()
+# =========================================================
+# LÓGICA DE NEGÓCIO
+# =========================================================
+def format_br(v):
+    return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-    c.execute("PRAGMA table_info(patrimonio)")
-    colunas = [col[1] for col in c.fetchall()]
-
-    if "investimentos" not in colunas:
-        c.execute("ALTER TABLE patrimonio ADD COLUMN investimentos REAL DEFAULT 0")
-
-    conn.commit()
+def get_data():
+    conn = sqlite3.connect('financeiro_pro.db')
+    status = pd.read_sql("SELECT * FROM status WHERE id=1", conn).iloc[0]
+    movs = pd.read_sql("SELECT * FROM movs ORDER BY id DESC", conn)
+    metas = pd.read_sql("SELECT * FROM metas", conn)
     conn.close()
+    return status, movs, metas
 
-fix_db()
+# =========================================================
+# INTERFACE PRINCIPAL
+# =========================================================
+status, movs, metas = get_data()
 
-# =====================================================
-# LOAD DATA
-# =====================================================
-def carregar():
-    conn = conectar()
-    config = pd.read_sql("SELECT * FROM config WHERE id=1", conn).iloc[0]
-    patrimonio = pd.read_sql("SELECT * FROM patrimonio WHERE id=1", conn).iloc[0]
-    mov = pd.read_sql("SELECT * FROM mov ORDER BY id DESC", conn)
-    conn.close()
-    return config, patrimonio, mov
+st.title("💰 Financeiro Pro")
+st.write(f"Olá, Giovanne | {datetime.now().strftime('%d/%m/%Y')}")
 
-config, p, m = carregar()
+# --- DASHBOARD DE MÉTRICAS ---
+col1, col2, col3 = st.columns(3)
 
-# =====================================================
-# LOGIN (DESATIVADO PARA TESTE)
-# =====================================================
-if "auth" not in st.session_state:
-    st.session_state.auth = True
+with col1:
+    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+    st.metric("Saldo em Conta", format_br(status['saldo']))
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# =====================================================
-# HEADER
-# =====================================================
-st.title(f"📈 Painel Financeiro - {config['nome']}")
+with col2:
+    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+    st.metric("Investido (CDB Inter)", format_br(status['cdb']))
+    st.markdown('</div>', unsafe_allow_html=True)
 
-saldo = float(p["saldo"])
-investimentos = float(p["investimentos"])
-meta = float(config["meta_reserva"])
-rendimento = investimentos * 0.0004
+with col3:
+    # Projeção de rendimento (Baseado em 100% CDI ~11.15% aa)
+    rend_dia = (status['cdb'] * 0.1115 / 252)
+    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+    st.metric("Rendimento Estimado Hoje", format_br(rend_dia), delta_color="normal")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# =====================================================
-# METRICS
-# =====================================================
-c1, c2, c3, c4 = st.columns(4)
+# --- NAVEGAÇÃO POR ABAS ---
+tab1, tab2, tab3 = st.tabs(["💸 Lançamentos", "📊 Inteligência", "🎯 Metas"])
 
-c1.metric("💵 Saldo", f"R$ {saldo:,.2f}")
-c2.metric("📈 Investimentos", f"R$ {investimentos:,.2f}")
-c3.metric("🎯 Meta", f"R$ {meta:,.2f}")
-c4.metric("💸 Rendimento Diário", f"R$ {rendimento:,.2f}")
+with tab1:
+    with st.expander("📝 Novo Registro", expanded=True):
+        c1, c2, c3 = st.columns([2, 1, 1])
+        desc = c1.text_input("Descrição")
+        valor = c2.number_input("Valor R$", min_value=0.0)
+        tipo = c3.selectbox("Tipo", ["Gasto", "Entrada", "Aposta (Bet)", "Investir no CDB"])
+        
+        cat = st.selectbox("Categoria", ["Alimentação", "Contas Fixas", "Lazer", "Salário", "Extra", "Outros"])
+        
+        if st.button("Salvar Movimentação", use_container_width=True):
+            conn = sqlite3.connect('financeiro_pro.db')
+            cur = conn.cursor()
+            cur.execute("INSERT INTO movs (data, desc, valor, cat, tipo) VALUES (?,?,?,?,?)",
+                        (datetime.now().strftime("%Y-%m-%d"), desc, valor, cat, tipo))
+            
+            # Atualiza Saldo Real
+            if tipo == "Gasto" or tipo == "Aposta (Bet)":
+                cur.execute("UPDATE status SET saldo = saldo - ? WHERE id=1", (valor,))
+            elif tipo == "Entrada":
+                cur.execute("UPDATE status SET saldo = saldo + ? WHERE id=1", (valor,))
+            elif tipo == "Investir no CDB":
+                cur.execute("UPDATE status SET saldo = saldo - ?, cdb = cdb + ? WHERE id=1", (valor, valor))
+            
+            conn.commit()
+            conn.close()
+            st.success("Lançado com sucesso!")
+            st.rerun()
 
-# =====================================================
-# TABS
-# =====================================================
-tab1, tab2, tab3, tab4 = st.tabs([
-    "💎 Gestão",
-    "📊 Evolução",
-    "🎯 Metas",
-    "⚙️ Configurações"
-])
+    st.subheader("Histórico Recente")
+    st.dataframe(movs.head(10), use_container_width=True, hide_index=True)
 
-# (todo o restante do seu código das abas permanece EXATAMENTE IGUAL)
+with tab2:
+    if not movs.empty:
+        col_left, col_right = st.columns(2)
+        
+        # Gastos por Categoria
+        gastos = movs[movs['tipo'].isin(['Gasto', 'Aposta (Bet)'])]
+        fig_pizza = px.pie(gastos, values='valor', names='cat', hole=0.4, title="Onde está seu dinheiro?")
+        fig_pizza.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color='white')
+        col_left.plotly_chart(fig_pizza, use_container_width=True)
+        
+        # Monitor de Apostas (Regra de Ouro)
+        total_bets = movs[movs['tipo'] == 'Aposta (Bet)']['valor'].sum()
+        col_right.markdown(f"""
+            <div style="background:#334155; padding:20px; border-radius:15px; border-left: 10px solid #f87171;">
+                <h4>Monitor de Apostas</h4>
+                <p>Total gasto este mês: <b>{format_br(total_bets)}</b></p>
+                <p><small>Mantenha sempre abaixo do seu limite estipulado.</small></p>
+            </div>
+        """, unsafe_allow_html=True)
+
+with tab3:
+    st.subheader("Suas Metas de Longo Prazo")
+    c_m1, c_m2 = st.columns(2)
+    m_nome = c_m1.text_input("Nome da Meta (Ex: Viagem)")
+    m_alvo = c_m2.number_input("Valor Alvo R$")
+    if st.button("Criar Nova Meta"):
+        conn = sqlite3.connect('financeiro_pro.db')
+        conn.execute("INSERT INTO metas (nome, alvo) VALUES (?,?)", (m_nome, m_alvo))
+        conn.commit()
+        conn.close()
+        st.rerun()
+    
+    st.divider()
+    for _, meta in metas.iterrows():
+        progresso = min(status['cdb'] / meta['alvo'], 1.0) if meta['alvo'] > 0 else 0
+        st.write(f"**{meta['nome']}** ({format_br(status['cdb'])} de {format_br(meta['alvo'])})")
+        st.progress(progresso)
