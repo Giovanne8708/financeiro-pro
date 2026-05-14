@@ -58,8 +58,8 @@ h1, h2, h3 {
 if "logado" not in st.session_state:
     st.session_state.logado = False
 
-USUARIO = "admin"
-SENHA = "123456"
+USUARIO = "giovanne"
+SENHA = "8708"
 
 if not st.session_state.logado:
 
