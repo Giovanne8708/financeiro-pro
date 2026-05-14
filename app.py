@@ -17,7 +17,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# CSS PROFISSIONAL
+# ESTILO
 # =========================================================
 
 st.markdown("""
@@ -28,20 +28,20 @@ st.markdown("""
     color: white;
 }
 
+.block-container {
+    padding-top: 2rem;
+}
+
 .stMetric {
     background: #161B22;
-    padding: 15px;
-    border-radius: 14px;
     border: 1px solid #30363D;
+    padding: 15px;
+    border-radius: 16px;
 }
 
 div[data-testid="stDataFrame"] {
-    border-radius: 14px;
+    border-radius: 12px;
     overflow: hidden;
-}
-
-.block-container {
-    padding-top: 2rem;
 }
 
 h1, h2, h3 {
@@ -52,7 +52,7 @@ h1, h2, h3 {
 """, unsafe_allow_html=True)
 
 # =========================================================
-# SEGURANÇA SIMPLES
+# LOGIN
 # =========================================================
 
 if "logado" not in st.session_state:
@@ -63,19 +63,22 @@ SENHA = "8708"
 
 if not st.session_state.logado:
 
-    st.title("🔐 Login Financeiro PRO")
+    st.title("🔐 Financeiro PRO")
 
     with st.form("login"):
+
         usuario = st.text_input("Usuário")
         senha = st.text_input("Senha", type="password")
 
         entrar = st.form_submit_button("Entrar")
 
         if entrar:
+
             if usuario == USUARIO and senha == SENHA:
+
                 st.session_state.logado = True
-                st.success("Login realizado!")
                 st.rerun()
+
             else:
                 st.error("Usuário ou senha inválidos.")
 
@@ -85,47 +88,85 @@ if not st.session_state.logado:
 # FUNÇÕES
 # =========================================================
 
-def load_csv(file, cols):
+def criar_csv_se_nao_existir(file, cols):
 
     path = Path(file)
 
-    if path.exists():
-        try:
-            return pd.read_csv(file)
-        except:
-            pass
+    if not path.exists():
 
-    df = pd.DataFrame(columns=cols)
-    df.to_csv(file, index=False)
-    return df
+        df = pd.DataFrame(columns=cols)
+        df.to_csv(file, index=False)
+
+    else:
+
+        try:
+
+            df = pd.read_csv(file)
+
+            if list(df.columns) != cols:
+
+                df = pd.DataFrame(columns=cols)
+                df.to_csv(file, index=False)
+
+        except:
+
+            df = pd.DataFrame(columns=cols)
+            df.to_csv(file, index=False)
+
+
+def load_csv(file):
+
+    return pd.read_csv(file)
 
 
 def save_csv(df, file):
+
     df.to_csv(file, index=False)
 
 
 def moeda(valor):
+
     return f"R$ {valor:,.2f}"
 
 
 # =========================================================
-# BASES
+# CRIAR BASES
 # =========================================================
 
-receitas = load_csv(
+criar_csv_se_nao_existir(
     "receitas.csv",
     ["data", "categoria", "descricao", "valor"]
 )
 
-despesas = load_csv(
+criar_csv_se_nao_existir(
     "despesas.csv",
     ["data", "categoria", "descricao", "valor"]
 )
 
-fixos = load_csv(
+criar_csv_se_nao_existir(
     "fixos.csv",
     ["descricao", "valor"]
 )
+
+criar_csv_se_nao_existir(
+    "investimentos.csv",
+    [
+        "ativo",
+        "tipo",
+        "quantidade",
+        "preco_medio",
+        "valor_atual"
+    ]
+)
+
+# =========================================================
+# CARREGAR BASES
+# =========================================================
+
+receitas = load_csv("receitas.csv")
+despesas = load_csv("despesas.csv")
+fixos = load_csv("fixos.csv")
+investimentos = load_csv("investimentos.csv")
 
 # =========================================================
 # SIDEBAR
@@ -140,6 +181,7 @@ pagina = st.sidebar.radio(
         "Receitas",
         "Despesas",
         "Fixos",
+        "Investimentos",
         "Relatórios"
     ]
 )
@@ -147,6 +189,7 @@ pagina = st.sidebar.radio(
 st.sidebar.markdown("---")
 
 if st.sidebar.button("🚪 Sair"):
+
     st.session_state.logado = False
     st.rerun()
 
@@ -162,44 +205,29 @@ if pagina == "Dashboard":
     total_despesas = despesas["valor"].sum()
     total_fixos = fixos["valor"].sum()
 
+    patrimonio = (
+        investimentos["valor_atual"] *
+        investimentos["quantidade"]
+    ).sum()
+
     saldo = total_receitas - total_despesas - total_fixos
 
-    # =====================================================
-    # MÉTRICAS
-    # =====================================================
+    c1, c2, c3, c4, c5 = st.columns(5)
 
-    c1, c2, c3, c4 = st.columns(4)
-
-    c1.metric(
-        "💰 Receitas",
-        moeda(total_receitas)
-    )
-
-    c2.metric(
-        "💸 Despesas",
-        moeda(total_despesas)
-    )
-
-    c3.metric(
-        "📌 Fixos",
-        moeda(total_fixos)
-    )
-
-    c4.metric(
-        "🏦 Saldo",
-        moeda(saldo)
-    )
+    c1.metric("💰 Receitas", moeda(total_receitas))
+    c2.metric("💸 Despesas", moeda(total_despesas))
+    c3.metric("📌 Fixos", moeda(total_fixos))
+    c4.metric("🏦 Saldo", moeda(saldo))
+    c5.metric("📈 Investimentos", moeda(patrimonio))
 
     st.markdown("##")
 
     # =====================================================
-    # PROJEÇÃO
+    # PROJEÇÕES
     # =====================================================
 
-    economia_mensal = saldo
-
-    proj_6 = economia_mensal * 6
-    proj_12 = economia_mensal * 12
+    proj_6 = saldo * 6
+    proj_12 = saldo * 12
 
     p1, p2 = st.columns(2)
 
@@ -221,19 +249,23 @@ if pagina == "Dashboard":
 
     with g1:
 
-        st.subheader("Receitas vs Despesas")
-
-        grafico_barra = pd.DataFrame({
-            "Tipo": ["Receitas", "Despesas", "Fixos"],
+        grafico = pd.DataFrame({
+            "Tipo": [
+                "Receitas",
+                "Despesas",
+                "Fixos",
+                "Investimentos"
+            ],
             "Valor": [
                 total_receitas,
                 total_despesas,
-                total_fixos
+                total_fixos,
+                patrimonio
             ]
         })
 
         fig = px.bar(
-            grafico_barra,
+            grafico,
             x="Tipo",
             y="Valor",
             text_auto=True
@@ -241,7 +273,7 @@ if pagina == "Dashboard":
 
         fig.update_layout(
             template="plotly_dark",
-            height=400
+            height=450
         )
 
         st.plotly_chart(
@@ -251,23 +283,29 @@ if pagina == "Dashboard":
 
     with g2:
 
-        st.subheader("Distribuição de Gastos")
-
         pizza = pd.DataFrame({
-            "Tipo": ["Despesas", "Fixos"],
-            "Valor": [total_despesas, total_fixos]
+            "Categoria": [
+                "Despesas",
+                "Fixos",
+                "Investimentos"
+            ],
+            "Valor": [
+                total_despesas,
+                total_fixos,
+                patrimonio
+            ]
         })
 
         fig2 = px.pie(
             pizza,
-            names="Tipo",
+            names="Categoria",
             values="Valor",
             hole=0.5
         )
 
         fig2.update_layout(
             template="plotly_dark",
-            height=400
+            height=450
         )
 
         st.plotly_chart(
@@ -283,24 +321,30 @@ elif pagina == "Receitas":
 
     st.title("💰 Receitas")
 
-    with st.form("form_receita", clear_on_submit=True):
+    with st.form("receita", clear_on_submit=True):
 
         c1, c2 = st.columns(2)
 
         with c1:
-            data = st.date_input("Data", date.today())
+
+            data = st.date_input(
+                "Data",
+                date.today()
+            )
 
             categoria = st.selectbox(
                 "Categoria",
                 [
                     "Salário",
                     "Freelance",
-                    "Investimento",
+                    "Investimentos",
+                    "Extra",
                     "Outros"
                 ]
             )
 
         with c2:
+
             descricao = st.text_input("Descrição")
 
             valor = st.number_input(
@@ -309,39 +353,38 @@ elif pagina == "Receitas":
                 format="%.2f"
             )
 
-        salvar = st.form_submit_button("Adicionar Receita")
+        salvar = st.form_submit_button(
+            "Adicionar Receita"
+        )
 
         if salvar:
 
-            if descricao and valor > 0:
+            nova_linha = pd.DataFrame([{
+                "data": data,
+                "categoria": categoria,
+                "descricao": descricao,
+                "valor": valor
+            }])
 
-                receitas.loc[len(receitas)] = [
-                    data,
-                    categoria,
-                    descricao,
-                    valor
-                ]
+            receitas = pd.concat(
+                [receitas, nova_linha],
+                ignore_index=True
+            )
 
-                save_csv(receitas, "receitas.csv")
+            save_csv(receitas, "receitas.csv")
 
-                st.success("Receita adicionada com sucesso!")
-
-                st.rerun()
-
-            else:
-                st.warning("Preencha os campos corretamente.")
+            st.success("Receita adicionada!")
+            st.rerun()
 
     st.markdown("##")
 
-    st.subheader("Editar Receitas")
-
-    edit_r = st.data_editor(
+    receitas_edit = st.data_editor(
         receitas,
-        num_rows="dynamic",
-        use_container_width=True
+        use_container_width=True,
+        num_rows="dynamic"
     )
 
-    save_csv(edit_r, "receitas.csv")
+    save_csv(receitas_edit, "receitas.csv")
 
 # =========================================================
 # DESPESAS
@@ -351,26 +394,36 @@ elif pagina == "Despesas":
 
     st.title("💸 Despesas")
 
-    with st.form("form_despesa", clear_on_submit=True):
+    with st.form("despesa", clear_on_submit=True):
 
         c1, c2 = st.columns(2)
 
         with c1:
-            data = st.date_input("Data", date.today())
+
+            data = st.date_input(
+                "Data",
+                date.today()
+            )
 
             categoria = st.selectbox(
                 "Categoria",
                 [
                     "Alimentação",
+                    "Saúde",
+                    "Lazer",
                     "Transporte",
                     "Moradia",
-                    "Lazer",
-                    "Saúde",
+                    "Educação",
+                    "Compras",
+                    "Viagem",
+                    "Streaming",
+                    "Internet",
                     "Outros"
                 ]
             )
 
         with c2:
+
             descricao = st.text_input("Descrição")
 
             valor = st.number_input(
@@ -379,39 +432,38 @@ elif pagina == "Despesas":
                 format="%.2f"
             )
 
-        salvar = st.form_submit_button("Adicionar Despesa")
+        salvar = st.form_submit_button(
+            "Adicionar Despesa"
+        )
 
         if salvar:
 
-            if descricao and valor > 0:
+            nova_linha = pd.DataFrame([{
+                "data": data,
+                "categoria": categoria,
+                "descricao": descricao,
+                "valor": valor
+            }])
 
-                despesas.loc[len(despesas)] = [
-                    data,
-                    categoria,
-                    descricao,
-                    valor
-                ]
+            despesas = pd.concat(
+                [despesas, nova_linha],
+                ignore_index=True
+            )
 
-                save_csv(despesas, "despesas.csv")
+            save_csv(despesas, "despesas.csv")
 
-                st.success("Despesa adicionada!")
-
-                st.rerun()
-
-            else:
-                st.warning("Preencha os campos corretamente.")
+            st.success("Despesa adicionada!")
+            st.rerun()
 
     st.markdown("##")
 
-    st.subheader("Editar Despesas")
-
-    edit_d = st.data_editor(
+    despesas_edit = st.data_editor(
         despesas,
-        num_rows="dynamic",
-        use_container_width=True
+        use_container_width=True,
+        num_rows="dynamic"
     )
 
-    save_csv(edit_d, "despesas.csv")
+    save_csv(despesas_edit, "despesas.csv")
 
 # =========================================================
 # FIXOS
@@ -419,9 +471,9 @@ elif pagina == "Despesas":
 
 elif pagina == "Fixos":
 
-    st.title("📌 Compromissos Fixos")
+    st.title("📌 Gastos Fixos")
 
-    with st.form("form_fixo", clear_on_submit=True):
+    with st.form("fixo", clear_on_submit=True):
 
         descricao = st.text_input("Descrição")
 
@@ -431,37 +483,280 @@ elif pagina == "Fixos":
             format="%.2f"
         )
 
-        salvar = st.form_submit_button("Adicionar")
+        salvar = st.form_submit_button(
+            "Adicionar"
+        )
 
         if salvar:
 
-            if descricao and valor > 0:
+            nova_linha = pd.DataFrame([{
+                "descricao": descricao,
+                "valor": valor
+            }])
 
-                fixos.loc[len(fixos)] = [
-                    descricao,
-                    valor
-                ]
+            fixos = pd.concat(
+                [fixos, nova_linha],
+                ignore_index=True
+            )
 
-                save_csv(fixos, "fixos.csv")
+            save_csv(fixos, "fixos.csv")
 
-                st.success("Fixo adicionado!")
-
-                st.rerun()
-
-            else:
-                st.warning("Preencha corretamente.")
+            st.success("Fixo adicionado!")
+            st.rerun()
 
     st.markdown("##")
 
-    st.subheader("Editar Fixos")
-
-    edit_f = st.data_editor(
+    fixos_edit = st.data_editor(
         fixos,
-        num_rows="dynamic",
-        use_container_width=True
+        use_container_width=True,
+        num_rows="dynamic"
     )
 
-    save_csv(edit_f, "fixos.csv")
+    save_csv(fixos_edit, "fixos.csv")
+
+# =========================================================
+# INVESTIMENTOS
+# =========================================================
+
+elif pagina == "Investimentos":
+
+    st.title("📈 Investimentos")
+
+    with st.form("investimento", clear_on_submit=True):
+
+        c1, c2 = st.columns(2)
+
+        with c1:
+
+            ativo = st.text_input("Nome do Ativo")
+
+            tipo = st.selectbox(
+                "Tipo",
+                [
+                    "Ações",
+                    "ETF",
+                    "Crypto",
+                    "FII",
+                    "Renda Fixa",
+                    "Tesouro",
+                    "Dólar",
+                    "Outros"
+                ]
+            )
+
+            quantidade = st.number_input(
+                "Quantidade",
+                min_value=0.0,
+                format="%.2f"
+            )
+
+        with c2:
+
+            preco_medio = st.number_input(
+                "Preço Médio",
+                min_value=0.0,
+                format="%.2f"
+            )
+
+            valor_atual = st.number_input(
+                "Valor Atual",
+                min_value=0.0,
+                format="%.2f"
+            )
+
+        salvar = st.form_submit_button(
+            "Adicionar Investimento"
+        )
+
+        if salvar:
+
+            nova_linha = pd.DataFrame([{
+                "ativo": ativo,
+                "tipo": tipo,
+                "quantidade": quantidade,
+                "preco_medio": preco_medio,
+                "valor_atual": valor_atual
+            }])
+
+            investimentos = pd.concat(
+                [investimentos, nova_linha],
+                ignore_index=True
+            )
+
+            save_csv(
+                investimentos,
+                "investimentos.csv"
+            )
+
+            st.success("Investimento adicionado!")
+            st.rerun()
+
+    st.markdown("##")
+
+    if not investimentos.empty:
+
+        investimentos["total_investido"] = (
+            investimentos["quantidade"] *
+            investimentos["preco_medio"]
+        )
+
+        investimentos["valor_total"] = (
+            investimentos["quantidade"] *
+            investimentos["valor_atual"]
+        )
+
+        investimentos["lucro"] = (
+            investimentos["valor_total"] -
+            investimentos["total_investido"]
+        )
+
+    st.subheader("Carteira de Investimentos")
+
+    investimentos_edit = st.data_editor(
+        investimentos,
+        use_container_width=True,
+        num_rows="dynamic"
+    )
+
+    save_csv(
+        investimentos_edit[
+            [
+                "ativo",
+                "tipo",
+                "quantidade",
+                "preco_medio",
+                "valor_atual"
+            ]
+        ],
+        "investimentos.csv"
+    )
+
+    st.markdown("##")
+
+    # =====================================================
+    # GRÁFICOS INVESTIMENTOS
+    # =====================================================
+
+    if not investimentos.empty:
+
+        g1, g2 = st.columns(2)
+
+        with g1:
+
+            fig = px.pie(
+                investimentos,
+                names="tipo",
+                values="valor_total",
+                hole=0.5
+            )
+
+            fig.update_layout(
+                template="plotly_dark",
+                height=450
+            )
+
+            st.plotly_chart(
+                fig,
+                use_container_width=True
+            )
+
+        with g2:
+
+            fig2 = px.bar(
+                investimentos,
+                x="ativo",
+                y="lucro",
+                text_auto=True
+            )
+
+            fig2.update_layout(
+                template="plotly_dark",
+                height=450
+            )
+
+            st.plotly_chart(
+                fig2,
+                use_container_width=True
+            )
+
+    st.markdown("##")
+
+    # =====================================================
+    # SIMULADOR
+    # =====================================================
+
+    st.subheader("🚀 Simulador de Juros Compostos")
+
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+
+        aporte = st.number_input(
+            "Aporte Mensal",
+            min_value=0.0,
+            value=500.0
+        )
+
+    with c2:
+
+        juros = st.number_input(
+            "Juros Anual (%)",
+            min_value=0.0,
+            value=12.0
+        )
+
+    with c3:
+
+        anos = st.number_input(
+            "Anos",
+            min_value=1,
+            value=10
+        )
+
+    taxa = juros / 100 / 12
+
+    meses = anos * 12
+
+    valor_futuro = 0
+
+    evolucao = []
+
+    for mes in range(meses):
+
+        valor_futuro = (
+            valor_futuro * (1 + taxa)
+        ) + aporte
+
+        evolucao.append(valor_futuro)
+
+    st.success(
+        f"💰 Patrimônio Futuro: {moeda(valor_futuro)}"
+    )
+
+    grafico = pd.DataFrame({
+        "Mês": list(range(1, meses + 1)),
+        "Valor": evolucao
+    })
+
+    fig3 = go.Figure()
+
+    fig3.add_trace(
+        go.Scatter(
+            x=grafico["Mês"],
+            y=grafico["Valor"],
+            mode="lines"
+        )
+    )
+
+    fig3.update_layout(
+        template="plotly_dark",
+        height=500
+    )
+
+    st.plotly_chart(
+        fig3,
+        use_container_width=True
+    )
 
 # =========================================================
 # RELATÓRIOS
@@ -469,26 +764,39 @@ elif pagina == "Fixos":
 
 elif pagina == "Relatórios":
 
-    st.title("📑 Relatórios Financeiros")
+    st.title("📑 Relatórios")
 
     total_receitas = receitas["valor"].sum()
     total_despesas = despesas["valor"].sum()
     total_fixos = fixos["valor"].sum()
 
-    saldo = total_receitas - total_despesas - total_fixos
+    patrimonio = (
+        investimentos["valor_atual"] *
+        investimentos["quantidade"]
+    ).sum()
+
+    saldo = (
+        total_receitas -
+        total_despesas -
+        total_fixos
+    )
 
     relatorio = pd.DataFrame({
+
         "Indicador": [
             "Receitas",
             "Despesas",
             "Fixos",
-            "Saldo"
+            "Saldo",
+            "Investimentos"
         ],
+
         "Valor": [
             total_receitas,
             total_despesas,
             total_fixos,
-            saldo
+            saldo,
+            patrimonio
         ]
     })
 
@@ -496,44 +804,6 @@ elif pagina == "Relatórios":
         relatorio,
         use_container_width=True
     )
-
-    # =====================================================
-    # LINHA DE EVOLUÇÃO
-    # =====================================================
-
-    if not receitas.empty:
-
-        receitas["data"] = pd.to_datetime(receitas["data"])
-
-        evolucao = receitas.groupby(
-            receitas["data"].dt.strftime("%Y-%m")
-        )["valor"].sum().reset_index()
-
-        fig = go.Figure()
-
-        fig.add_trace(
-            go.Scatter(
-                x=evolucao["data"],
-                y=evolucao["valor"],
-                mode="lines+markers",
-                name="Receitas"
-            )
-        )
-
-        fig.update_layout(
-            template="plotly_dark",
-            height=500,
-            title="Evolução Financeira"
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
-
-    # =====================================================
-    # EXPORTAÇÃO
-    # =====================================================
 
     st.markdown("##")
 
