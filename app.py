@@ -155,12 +155,12 @@ def moeda(valor):
 
 criar_csv(
     "receitas.csv",
-    ["data", "categoria", "descricao", "valor", "conta"]
+    ["data", "categoria", "valor"]
 )
 
 criar_csv(
     "despesas.csv",
-    ["data", "categoria", "descricao", "valor", "conta"]
+    ["data", "categoria", "valor"]
 )
 
 criar_csv(
@@ -256,20 +256,20 @@ if pagina == "Dashboard":
 
     
     def card(titulo, valor):
-        st.markdown(f"""
-        <div class="card">
-            <h4>{titulo}</h4>
-            <h2>{valor}</h2>
-        </div>
-        """, unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="card">
+        <h4>{titulo}</h4>
+        <h2>{valor}</h2>
+    </div>
+    """, unsafe_allow_html=True)
 
-    c1, c2, c3, c4, c5 = st.columns(5)
+c1, c2, c3, c4, c5 = st.columns(5)
 
-    with c1: card("💰 Receitas", moeda(total_receitas))
-    with c2: card("💸 Despesas", moeda(total_despesas))
-    with c3: card("📌 Dívidas/Fixos", moeda(total_fixos))
-    with c4: card("🏦 Saldo", moeda(saldo))
-    with c5: card("📈 Patrimônio", moeda(patrimonio))
+with c1: card("💰 Receitas", moeda(total_receitas))
+with c2: card("💸 Despesas", moeda(total_despesas))
+with c3: card("📌 Dívidas/Fixos", moeda(total_fixos))
+with c4: card("🏦 Livre", moeda(saldo))
+with c5: card("📈 Patrimônio", moeda(patrimonio))
     st.markdown("##")
 
     # =====================================================
@@ -354,8 +354,8 @@ if pagina == "Dashboard":
             pizza,
             names="Categoria",
             values="Valor",
-                hole=0.5
-            )
+            hole=0.5
+        )
 
         fig2.update_layout(
             template="plotly_dark",
@@ -366,6 +366,7 @@ if pagina == "Dashboard":
             fig2,
             use_container_width=True
         )
+
 # =========================================================
 # RECEITAS
 # =========================================================
@@ -398,7 +399,7 @@ elif pagina == "Receitas":
 
         with c2:
 
-            descricao = st.text_input("Descrição")
+            # descrição removida
 
             valor = st.number_input(
                 "Valor",
@@ -412,10 +413,38 @@ elif pagina == "Receitas":
 
         if salvar:
 
+
+            existente = investimentos[
+                investimentos["ativo"] == ativo
+            ]
+
+            if not existente.empty:
+
+                idx = existente.index[0]
+
+                qtd_antiga = float(investimentos.loc[idx, "quantidade"])
+                preco_antigo = float(investimentos.loc[idx, "preco_medio"])
+
+                nova_qtd = qtd_antiga + quantidade
+
+                total_antigo = qtd_antiga * preco_antigo
+                total_novo = quantidade * preco_medio
+
+                novo_preco_medio = (
+                    total_antigo + total_novo
+                ) / nova_qtd
+
+                investimentos.loc[idx, "quantidade"] = nova_qtd
+                investimentos.loc[idx, "preco_medio"] = novo_preco_medio
+                investimentos.loc[idx, "valor_atual"] = valor_atual
+
+            else:
+
+
             nova = pd.DataFrame([{
                 "data": data,
                 "categoria": categoria,
-                "descricao": descricao,
+                
                 "valor": valor
             }])
 
@@ -431,29 +460,26 @@ elif pagina == "Receitas":
     st.markdown("##")
 
     
-    st.markdown("## 📋 Receitas lançadas")
+st.markdown("## 📋 Receitas lançadas")
 
-    df = pd.read_csv("receitas.csv").reset_index()
+df = pd.read_csv("receitas.csv").reset_index()
 
-    for i, row in df.iterrows():
-        c1, c2, c3, c4, c5, c6 = st.columns([1,2,2,2,2,1])
+for i, row in df.iterrows():
+    c1, c2, c3, c4, c5, c6 = st.columns([1,2,2,2,2,1])
 
-        c1.write(row["index"])
-        c2.write(row["data"])
-        c3.write(row["categoria"])
-        c4.write(row["descricao"])
-        c5.write(moeda(row["valor"]))
+    c1.write(row["index"])
+    c2.write(row["data"])
+    c3.write(row["categoria"])
+    c4.write(row["descricao"])
+    c5.write(moeda(row["valor"]))
 
-        if c6.button("🗑️", key=f"del_rec_{i}"):
-            df = df.drop(i)
-            df.drop(columns=["index"]).to_csv("receitas.csv", index=False)
-            st.rerun()
+    if c6.button("🗑️", key=f"del_rec_{i}"):
+        df = df.drop(i)
+        df.drop(columns=["index"]).to_csv("receitas.csv", index=False)
+        st.rerun()
 
 
-        if st.button("💾 Salvar Receitas"):
 
-            save_csv(edit, "receitas.csv")
-            st.success("Receitas atualizadas!")
 # =========================================================
 # DESPESAS
 # =========================================================
@@ -492,7 +518,7 @@ elif pagina == "Despesas":
 
         with c2:
 
-            descricao = st.text_input("Descrição")
+            # descrição removida
 
             valor = st.number_input(
                 "Valor",
@@ -506,10 +532,38 @@ elif pagina == "Despesas":
 
         if salvar:
 
+
+            existente = investimentos[
+                investimentos["ativo"] == ativo
+            ]
+
+            if not existente.empty:
+
+                idx = existente.index[0]
+
+                qtd_antiga = float(investimentos.loc[idx, "quantidade"])
+                preco_antigo = float(investimentos.loc[idx, "preco_medio"])
+
+                nova_qtd = qtd_antiga + quantidade
+
+                total_antigo = qtd_antiga * preco_antigo
+                total_novo = quantidade * preco_medio
+
+                novo_preco_medio = (
+                    total_antigo + total_novo
+                ) / nova_qtd
+
+                investimentos.loc[idx, "quantidade"] = nova_qtd
+                investimentos.loc[idx, "preco_medio"] = novo_preco_medio
+                investimentos.loc[idx, "valor_atual"] = valor_atual
+
+            else:
+
+
             nova = pd.DataFrame([{
                 "data": data,
                 "categoria": categoria,
-                "descricao": descricao,
+                
                 "valor": valor
             }])
 
@@ -525,29 +579,26 @@ elif pagina == "Despesas":
     st.markdown("##")
 
     
-    st.markdown("## 📋 Despesas lançadas")
+st.markdown("## 📋 Despesas lançadas")
 
-    df = pd.read_csv("despesas.csv").reset_index()
+df = pd.read_csv("despesas.csv").reset_index()
 
-    for i, row in df.iterrows():
-        c1, c2, c3, c4, c5, c6 = st.columns([1,2,2,2,2,1])
+for i, row in df.iterrows():
+    c1, c2, c3, c4, c5, c6 = st.columns([1,2,2,2,2,1])
 
-        c1.write(row["index"])
-        c2.write(row["data"])
-        c3.write(row["categoria"])
-        c4.write(row["descricao"])
-        c5.write(moeda(row["valor"]))
+    c1.write(row["index"])
+    c2.write(row["data"])
+    c3.write(row["categoria"])
+    c4.write(row["descricao"])
+    c5.write(moeda(row["valor"]))
 
-        if c6.button("🗑️", key=f"del_des_{i}"):
-            df = df.drop(i)
-            df.drop(columns=["index"]).to_csv("despesas.csv", index=False)
-            st.rerun()
+    if c6.button("🗑️", key=f"del_des_{i}"):
+        df = df.drop(i)
+        df.drop(columns=["index"]).to_csv("despesas.csv", index=False)
+        st.rerun()
 
 
-        if st.button("💾 Salvar Despesas"):
 
-            save_csv(edit, "despesas.csv")
-            st.success("Despesas atualizadas!")
 # =========================================================
 # FIXOS / PARCELAS
 # =========================================================
@@ -594,9 +645,37 @@ elif pagina == "Fixos":
 
         if salvar:
 
+
+            existente = investimentos[
+                investimentos["ativo"] == ativo
+            ]
+
+            if not existente.empty:
+
+                idx = existente.index[0]
+
+                qtd_antiga = float(investimentos.loc[idx, "quantidade"])
+                preco_antigo = float(investimentos.loc[idx, "preco_medio"])
+
+                nova_qtd = qtd_antiga + quantidade
+
+                total_antigo = qtd_antiga * preco_antigo
+                total_novo = quantidade * preco_medio
+
+                novo_preco_medio = (
+                    total_antigo + total_novo
+                ) / nova_qtd
+
+                investimentos.loc[idx, "quantidade"] = nova_qtd
+                investimentos.loc[idx, "preco_medio"] = novo_preco_medio
+                investimentos.loc[idx, "valor_atual"] = valor_atual
+
+            else:
+
+
             nova = pd.DataFrame([{
 
-                "descricao": descricao,
+                
                 "valor_parcela": valor,
                 "parcelas_total": parcelas_total,
                 "parcelas_pagas": parcelas_pagas
@@ -656,6 +735,33 @@ elif pagina == "Fixos":
                 f"Restante: "
                 f"{moeda(row['valor_restante'])}"
             )
+
+
+            pagar = st.button(
+                f"✅ Pagar Parcela {i}",
+                key=f"pagar_{i}"
+            )
+
+            if pagar:
+
+                if row["parcelas_pagas"] < row["parcelas_total"]:
+
+                    fixos.loc[i, "parcelas_pagas"] += 1
+
+                    save_csv(
+                        fixos[
+                            [
+                                "descricao",
+                                "valor_parcela",
+                                "parcelas_total",
+                                "parcelas_pagas"
+                            ]
+                        ],
+                        "fixos.csv"
+                    )
+
+                    st.success("Parcela paga!")
+                    st.rerun()
 
         st.markdown("##")
 
@@ -738,6 +844,34 @@ elif pagina == "Investimentos":
         )
 
         if salvar:
+
+
+            existente = investimentos[
+                investimentos["ativo"] == ativo
+            ]
+
+            if not existente.empty:
+
+                idx = existente.index[0]
+
+                qtd_antiga = float(investimentos.loc[idx, "quantidade"])
+                preco_antigo = float(investimentos.loc[idx, "preco_medio"])
+
+                nova_qtd = qtd_antiga + quantidade
+
+                total_antigo = qtd_antiga * preco_antigo
+                total_novo = quantidade * preco_medio
+
+                novo_preco_medio = (
+                    total_antigo + total_novo
+                ) / nova_qtd
+
+                investimentos.loc[idx, "quantidade"] = nova_qtd
+                investimentos.loc[idx, "preco_medio"] = novo_preco_medio
+                investimentos.loc[idx, "valor_atual"] = valor_atual
+
+            else:
+
 
             nova = pd.DataFrame([{
 
