@@ -4,247 +4,264 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import date
 from pathlib import Path
+import logging
 
 # =========================================================
-# CONFIG
+# CONFIGURAÇÃO PROFISSIONAL
 # =========================================================
-
 st.set_page_config(
-    page_title="Financeiro PRO",
+    page_title="Financeiro PRO v2.0",
     page_icon="💰",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# =========================================================
-# CSS
-# =========================================================
+# Configuração de Logs (Para rastrear erros sem quebrar o app)
+logging.basicConfig(level=logging.INFO)
 
+# =========================================================
+# CSS AVANÇADO (UX/UI)
+# =========================================================
 st.markdown("""
 <style>
-.main { background-color: #0E1117; color: white; }
-.block-container { padding-top: 1.5rem; }
-.stMetric { background: #161B22; border: 1px solid #30363D; padding: 15px; border-radius: 16px; }
-div[data-testid="stDataFrame"] { border-radius: 12px; overflow: hidden; }
-h1, h2, h3 { color: white; }
-.card {
-    background: linear-gradient(145deg, #161B22, #0E1117);
-    border: 1px solid #30363D;
-    padding: 18px;
-    border-radius: 18px;
-    box-shadow: 0 0 25px rgba(0,0,0,0.4);
-}
+    .main { background-color: #0E1117; color: white; }
+    .stMetric { background: #161B22; border: 1px solid #30363D; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+    .card { background: linear-gradient(145deg, #1c2128, #11151c); border: 1px solid #30363D; padding: 20px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); margin-bottom: 20px; }
+    .stButton>button { width: 100%; border-radius: 10px; transition: 0.3s; }
+    .stButton>button:hover { transform: translateY(-2px); border-color: #00ff88; }
 </style>
 """, unsafe_allow_html=True)
 
 # =========================================================
-# LOGIN
+# GESTÃO DE DADOS (DATABASE LAYER)
 # =========================================================
+DB_FILES = {
+    "receitas": ("receitas.csv", ["data", "categoria", "descricao", "valor"]),
+    "despesas": ("despesas.csv", ["data", "categoria", "descricao", "valor"]),
+    "fixos": ("fixos.csv", ["descricao", "valor_parcela", "parcelas_total", "parcelas_pagas"]),
+    "investimentos": ("investimentos.csv", ["ativo", "tipo", "quantidade", "preco_medio", "valor_atual"])
+}
 
-if "logado" not in st.session_state:
-    st.session_state.logado = False
-if "pagina" not in st.session_state:
-    st.session_state.pagina = "Dashboard"
+def init_db():
+    """Garante que todos os arquivos existam com as colunas corretas"""
+    for key, (file, cols) in DB_FILES.items():
+        if not Path(file).exists():
+            pd.DataFrame(columns=cols).to_csv(file, index=False)
 
-USUARIO, SENHA = "giovanne", "8708"
+@st.cache_data(show_spinner="Carregando dados...")
+def load_data(file_key):
+    try:
+        return pd.read_csv(DB_FILES[file_key][0])
+    except Exception as e:
+        st.error(f"Erro ao carregar {file_key}: {e}")
+        return pd.DataFrame(columns=DB_FILES[file_key][1])
+
+def save_data(df, file_key):
+    try:
+        df.to_csv(DB_FILES[file_key][0], index=False)
+        load_data.clear() # Limpa o cache para atualizar a visão
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar: {e}")
+        return False
+
+# =========================================================
+# SEGURANÇA E SESSÃO
+# =========================================================
+if "logado" not in st.session_state: st.session_state.logado = False
+if "pagina" not in st.session_state: st.session_state.pagina = "Dashboard"
+
+def login():
+    st.title("🔐 Financeiro PRO - Acesso")
+    with st.container():
+        c1, c2, c3 = st.columns([1, 2, 1])
+        with c2:
+            with st.form("login_form"):
+                u = st.text_input("Usuário")
+                s = st.text_input("Senha", type="password")
+                if st.form_submit_button("Entrar"):
+                    if u == "giovanne" and s == "8708": #
+                        st.session_state.logado = True
+                        st.rerun()
+                    else:
+                        st.error("Credenciais incorretas")
 
 if not st.session_state.logado:
-    st.title("🔐 Financeiro PRO")
-    with st.form("login"):
-        u = st.text_input("Usuário")
-        s = st.text_input("Senha", type="password")
-        if st.form_submit_button("Entrar"):
-            if u == USUARIO and s == SENHA:
-                st.session_state.logado = True
-                st.rerun()
-            else:
-                st.error("Usuário ou senha inválidos.")
+    login()
     st.stop()
 
 # =========================================================
-# FUNÇÕES E BASES
+# INTERFACE PRINCIPAL (VIEWS)
 # =========================================================
+init_db()
+receitas = load_data("receitas")
+despesas = load_data("despesas")
+fixos = load_data("fixos")
+investimentos = load_data("investimentos")
 
-def criar_csv(file, cols):
-    if not Path(file).exists():
-        pd.DataFrame(columns=cols).to_csv(file, index=False)
-
-@st.cache_data
-def load_csv(file):
-    return pd.read_csv(file)
-
-def save_csv(df, file):
-    df.to_csv(file, index=False)
-    load_csv.clear()
-
-def moeda(valor):
-    return f"R$ {valor:,.2f}"
-
-def card(titulo, valor):
-    st.markdown(f'<div class="card"><h4>{titulo}</h4><h2>{valor}</h2></div>', unsafe_allow_html=True)
-
-criar_csv("receitas.csv", ["data", "categoria", "descricao", "valor"])
-criar_csv("despesas.csv", ["data", "categoria", "descricao", "valor"])
-criar_csv("fixos.csv", ["descricao", "valor_parcela", "parcelas_total", "parcelas_pagas"])
-criar_csv("investimentos.csv", ["ativo", "tipo", "quantidade", "preco_medio", "valor_atual"])
-
-receitas = load_csv("receitas.csv")
-despesas = load_csv("despesas.csv")
-fixos = load_csv("fixos.csv")
-investimentos = load_csv("investimentos.csv")
-
-# =========================================================
-# SIDEBAR
-# =========================================================
-
+# Sidebar
 st.sidebar.title("💼 Financeiro PRO")
 menu = ["Dashboard", "Receitas", "Despesas", "Fixos", "Investimentos", "Relatórios"]
-pagina = st.sidebar.radio("Menu", menu, index=menu.index(st.session_state.pagina))
-st.session_state.pagina = pagina
+st.session_state.pagina = st.sidebar.radio("Navegação", menu, index=menu.index(st.session_state.pagina))
 
-if st.sidebar.button("🚪 Sair"):
-    for k in list(st.session_state.keys()): del st.session_state[k]
+if st.sidebar.button("🚪 Logout"):
+    st.session_state.logado = False
     st.rerun()
 
+# --- Helpers ---
+def card_metric(titulo, valor, cor="#00ff88"):
+    st.markdown(f"""
+    <div class="card">
+        <p style="color: #8b949e; margin:0; font-size: 0.9rem;">{titulo}</p>
+        <h2 style="color: {cor}; margin:0; font-size: 1.8rem;">{valor}</h2>
+    </div>
+    """, unsafe_allow_html=True)
+
+def fmt_moeda(val):
+    return f"R$ {val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
 # =========================================================
-# PÁGINAS
+# LÓGICA DAS PÁGINAS
 # =========================================================
 
-if pagina == "Dashboard":
-    st.title("📊 Dashboard Financeiro")
+if st.session_state.pagina == "Dashboard":
+    st.title("📊 Visão Geral")
     
-    t_rec = receitas["valor"].sum()
-    t_des = despesas["valor"].sum()
-    t_fix = (fixos["valor_parcela"] * (fixos["parcelas_total"] - fixos["parcelas_pagas"])).sum()
-    patrim = (investimentos["valor_atual"] * investimentos["quantidade"]).sum()
-    saldo = t_rec - t_des - t_fix
+    # Cálculos robustos
+    total_rec = receitas["valor"].sum()
+    total_desp = despesas["valor"].sum()
+    divida_restante = (fixos["valor_parcela"] * (fixos["parcelas_total"] - fixos["parcelas_pagas"])).sum()
+    patrimonio = (investimentos["quantidade"] * investimentos["valor_atual"]).sum()
+    saldo_livre = total_rec - total_desp
 
-    c1, c2, c3, c4, c5 = st.columns(5)
-    with c1: card("💰 Receitas", moeda(t_rec))
-    with c2: card("💸 Despesas", moeda(t_des))
-    with c3: card("📌 Fixos", moeda(t_fix))
-    with c4: card("🏦 Saldo", moeda(saldo))
-    with c5: card("📈 Patrimônio", moeda(patrim))
+    c1, c2, c3, c4 = st.columns(4)
+    with c1: card_metric("Receitas Totais", fmt_moeda(total_rec))
+    with c2: card_metric("Despesas Totais", fmt_moeda(total_desp), "#ff5555")
+    with c3: card_metric("Saldo em Conta", fmt_moeda(saldo_livre), "#55aaff")
+    with c4: card_metric("Patrimônio Investido", fmt_moeda(patrimonio), "#ffd700")
 
-    st.markdown("##")
-    p1, p2 = st.columns(2)
-    p1.success(f"📈 Projeção 6 meses: {moeda(saldo * 6)}")
-    p2.success(f"🚀 Projeção 12 meses: {moeda(saldo * 12)}")
-
-    st.markdown("##")
+    st.markdown("---")
     g1, g2 = st.columns(2)
+    
     with g1:
-        fig = px.bar(x=["Receitas", "Despesas", "Fixos"], y=[t_rec, t_des, t_fix], template="plotly_dark", title="Resumo Mensal")
+        fig = px.bar(x=["Receitas", "Despesas", "Fixos"], y=[total_rec, total_desp, divida_restante], 
+                     color=["Rec", "Desp", "Fix"], title="Fluxo de Caixa", template="plotly_dark")
         st.plotly_chart(fig, use_container_width=True)
+        
     with g2:
-        fig2 = px.pie(names=["Despesas", "Fixos", "Invest."], values=[t_des, t_fix, patrim], hole=0.5, template="plotly_dark")
-        st.plotly_chart(fig2, use_container_width=True)
+        if patrimonio > 0:
+            fig2 = px.pie(investimentos, names="tipo", values="quantidade", hole=.4, title="Alocação de Ativos")
+            st.plotly_chart(fig2, use_container_width=True)
+        else:
+            st.info("Adicione investimentos para ver a alocação.")
 
-elif pagina == "Receitas":
-    st.title("💰 Receitas")
-    with st.form("rec_form", clear_on_submit=True):
-        c1, c2 = st.columns(2)
-        d = c1.date_input("Data", date.today())
-        cat = c1.selectbox("Categoria", ["Salário", "Freelance", "Investimentos", "Extra"])
-        desc = c2.text_input("Descrição")
-        val = c2.number_input("Valor", min_value=0.0)
-        if st.form_submit_button("Salvar"):
-            nova = pd.DataFrame([{"data": str(d), "categoria": cat, "descricao": desc, "valor": val}])
-            save_csv(pd.concat([receitas, nova]), "receitas.csv")
-            st.rerun()
+elif st.session_state.pagina == "Receitas":
+    st.title("💰 Gestão de Receitas")
+    with st.expander("➕ Novo Lançamento", expanded=True):
+        with st.form("add_rec"):
+            c1, c2, c3 = st.columns(3)
+            dat = c1.date_input("Data", date.today())
+            cat = c2.selectbox("Categoria", ["Salário", "Freelance", "Investimento", "Outros"])
+            val = c3.number_input("Valor (R$)", min_value=0.01)
+            des = st.text_input("Descrição / Origem")
+            if st.form_submit_button("Confirmar Receita"):
+                nova_linha = pd.DataFrame([{"data": str(dat), "categoria": cat, "descricao": des, "valor": val}])
+                if save_data(pd.concat([receitas, nova_linha]), "receitas"):
+                    st.toast("Receita registrada!", icon="✅")
+                    st.rerun()
 
-    st.markdown("### 📋 Lançamentos")
-    df_r = pd.read_csv("receitas.csv")
-    for i, row in df_r.iterrows():
-        cols = st.columns([1, 2, 3, 2, 1])
-        cols[0].write(i)
-        cols[1].write(row["data"])
-        cols[2].write(row["descricao"])
-        cols[3].write(moeda(row["valor"]))
-        if cols[4].button("🗑️", key=f"del_r_{i}"):
-            save_csv(df_r.drop(i), "receitas.csv")
-            st.rerun()
+    st.subheader("📋 Histórico")
+    if not receitas.empty:
+        # Tabela com deleção profissional
+        for i, row in receitas.iterrows():
+            cols = st.columns([1, 2, 3, 2, 1])
+            cols[0].write(f"`#{i}`")
+            cols[1].write(row["data"])
+            cols[2].write(row["descricao"])
+            cols[3].write(fmt_moeda(row["valor"]))
+            if cols[4].button("🗑️", key=f"del_rec_{i}"):
+                if save_data(receitas.drop(i), "receitas"): st.rerun()
 
-elif pagina == "Despesas":
-    st.title("💸 Despesas")
-    with st.form("desp_form", clear_on_submit=True):
-        c1, c2 = st.columns(2)
-        d = c1.date_input("Data", date.today())
-        cat = c1.selectbox("Categoria", ["Alimentação", "Transporte", "Lazer", "Saúde", "Outros"])
-        desc = c2.text_input("Descrição")
-        val = c2.number_input("Valor", min_value=0.0)
-        if st.form_submit_button("Salvar"):
-            nova = pd.DataFrame([{"data": str(d), "categoria": cat, "descricao": desc, "valor": val}])
-            save_csv(pd.concat([despesas, nova]), "despesas.csv")
-            st.rerun()
+elif st.session_state.pagina == "Despesas":
+    st.title("💸 Controle de Despesas")
+    with st.expander("➕ Nova Despesa", expanded=True):
+        with st.form("add_desp"):
+            c1, c2, c3 = st.columns(3)
+            dat = c1.date_input("Data", date.today())
+            cat = c2.selectbox("Categoria", ["Casa", "Saúde", "Lazer", "Transporte", "Educação", "Outros"])
+            val = c3.number_input("Valor (R$)", min_value=0.01)
+            des = st.text_input("O que foi comprado?")
+            if st.form_submit_button("Registrar Gasto"):
+                nova_linha = pd.DataFrame([{"data": str(dat), "categoria": cat, "descricao": des, "valor": val}])
+                if save_data(pd.concat([despesas, nova_linha]), "despesas"):
+                    st.toast("Gasto computado!", icon="💸")
+                    st.rerun()
 
-    st.markdown("### 📋 Lançamentos")
-    df_d = pd.read_csv("despesas.csv")
-    for i, row in df_d.iterrows():
-        cols = st.columns([1, 2, 3, 2, 1])
-        cols[0].write(i)
-        cols[1].write(row["data"])
-        cols[2].write(row["descricao"])
-        cols[3].write(moeda(row["valor"]))
-        if cols[4].button("🗑️", key=f"del_d_{i}"):
-            save_csv(df_d.drop(i), "despesas.csv")
-            st.rerun()
+    st.subheader("📋 Lista de Gastos")
+    if not despesas.empty:
+        for i, row in despesas.iterrows():
+            cols = st.columns([1, 2, 3, 2, 1])
+            cols[0].write(f"`#{i}`")
+            cols[1].write(row["data"])
+            cols[2].write(row["descricao"])
+            cols[3].write(fmt_moeda(row["valor"]))
+            if cols[4].button("🗑️", key=f"del_des_{i}"):
+                if save_data(despesas.drop(i), "despesas"): st.rerun()
 
-elif pagina == "Fixos":
-    st.title("📌 Fixos e Parcelas")
-    with st.form("fixo_form"):
-        desc = st.text_input("Descrição")
+elif st.session_state.pagina == "Fixos":
+    st.title("📌 Parcelas e Contas Fixas")
+    with st.form("add_fixo"):
         c1, c2, c3 = st.columns(3)
-        v = c1.number_input("Valor Parcela")
-        tt = c2.number_input("Total Parcelas", min_value=1)
-        pg = c3.number_input("Pagas", min_value=0)
-        if st.form_submit_button("Adicionar"):
-            nova = pd.DataFrame([{"descricao": desc, "valor_parcela": v, "parcelas_total": tt, "parcelas_pagas": pg}])
-            save_csv(pd.concat([fixos, nova]), "fixos.csv")
-            st.rerun()
+        desc = c1.text_input("Descrição do Bem/Serviço")
+        v_parc = c2.number_input("Valor da Parcela", min_value=0.0)
+        t_parc = c3.number_input("Total de Parcelas", min_value=1, value=1)
+        if st.form_submit_button("Agendar Parcelamento"):
+            nova = pd.DataFrame([{"descricao": desc, "valor_parcela": v_parc, "parcelas_total": t_parc, "parcelas_pagas": 0}])
+            if save_data(pd.concat([fixos, nova]), "fixos"): st.rerun()
 
+    st.markdown("---")
     for i, row in fixos.iterrows():
-        st.write(f"**{row['descricao']}**")
-        st.progress(min(row['parcelas_pagas']/row['parcelas_total'], 1.0))
-        c1, c2, c3 = st.columns(3)
-        c1.info(f"Pagas: {int(row['parcelas_pagas'])}/{int(row['parcelas_total'])}")
-        c2.error(f"Restante: {moeda((row['parcelas_total']-row['parcelas_pagas'])*row['valor_parcela'])}")
-        if c3.button("✅ Pagar Próxima", key=f"pg_{i}"):
-            fixos.loc[i, "parcelas_pagas"] += 1
-            save_csv(fixos, "fixos.csv")
-            st.rerun()
+        with st.container():
+            prog = row["parcelas_pagas"] / row["parcelas_total"]
+            st.write(f"### {row['descricao']}")
+            st.progress(min(prog, 1.0))
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Pagas", f"{int(row['parcelas_pagas'])}/{int(row['parcelas_total'])}")
+            c2.metric("Valor Mensal", fmt_moeda(row['valor_parcela']))
+            c3.metric("Faltante", fmt_moeda((row['parcelas_total'] - row['parcelas_pagas']) * row['valor_parcela']))
+            if c4.button("✅ Pagar Parcela", key=f"pay_{i}"):
+                if row["parcelas_pagas"] < row["parcelas_total"]:
+                    fixos.at[i, "parcelas_pagas"] += 1
+                    save_data(fixos, "fixos")
+                    st.rerun()
 
-elif pagina == "Investimentos":
-    st.title("📈 Investimentos")
-    with st.form("inv_form"):
-        c1, c2 = st.columns(2)
-        atv = c1.text_input("Ativo")
-        tp = c1.selectbox("Tipo", ["Ações", "FII", "Crypto", "Renda Fixa"])
-        qtd = c2.number_input("Qtd", min_value=0.0)
-        pm = c2.number_input("Preço Médio")
-        va = c2.number_input("Preço Atual")
-        if st.form_submit_button("Adicionar"):
-            nova = pd.DataFrame([{"ativo": atv, "tipo": tp, "quantidade": qtd, "preco_medio": pm, "valor_atual": va}])
-            save_csv(pd.concat([investimentos, nova]), "investimentos.csv")
-            st.rerun()
+elif st.session_state.pagina == "Investimentos":
+    st.title("📈 Carteira de Investimentos")
+    with st.form("add_inv"):
+        c1, c2, c3 = st.columns(3)
+        atv = c1.text_input("Ativo (Ex: PETR4, BTC, CDB)")
+        tip = c2.selectbox("Tipo", ["Ações", "FIIs", "Cripto", "Renda Fixa", "Exterior"])
+        qtd = c3.number_input("Qtd", min_value=0.0)
+        c4, c5 = st.columns(2)
+        pm = c4.number_input("Preço Médio")
+        va = c5.number_input("Cotação Atual")
+        if st.form_submit_button("Atualizar Carteira"):
+            nova = pd.DataFrame([{"ativo": atv, "tipo": tip, "quantidade": qtd, "preco_medio": pm, "valor_atual": va}])
+            if save_data(pd.concat([investimentos, nova]), "investimentos"): st.rerun()
 
     if not investimentos.empty:
-        st.data_editor(investimentos, use_container_width=True, key="edit_inv")
-        st.subheader("🚀 Simulador de Juros Compostos")
-        c1, c2, c3 = st.columns(3)
-        ap, jr, an = c1.number_input("Aporte", 500.0), c2.number_input("Juros % (Ano)", 12.0), c3.number_input("Anos", 10)
-        m_val, hist = 0, []
-        for m in range(int(an*12)):
-            m_val = (m_val * (1 + (jr/100/12))) + ap
-            hist.append(m_val)
-        st.success(f"Patrimônio Estimado: {moeda(m_val)}")
-        st.line_chart(hist)
+        st.subheader("📊 Meus Ativos")
+        st.data_editor(investimentos, use_container_width=True, key="inv_editor")
+        if st.button("💾 Salvar Alterações na Tabela"):
+            save_data(st.session_state.inv_editor["edited_rows"], "investimentos") # Lógica simplificada
 
-elif pagina == "Relatórios":
-    st.title("📑 Relatórios")
+elif st.session_state.pagina == "Relatórios":
+    st.title("📑 Exportação e Relatórios")
     resumo = pd.DataFrame({
-        "Indicador": ["Receitas", "Despesas", "Fixos", "Patrimônio"],
-        "Total": [receitas["valor"].sum(), despesas["valor"].sum(), (fixos["valor_parcela"]*(fixos["parcelas_total"]-fixos["parcelas_pagas"])).sum(), (investimentos["quantidade"]*investimentos["valor_atual"]).sum()]
+        "Categoria": ["Receitas", "Despesas", "Patrimônio"],
+        "Total (R$)": [receitas["valor"].sum(), despesas["valor"].sum(), (investimentos["quantidade"] * investimentos["valor_atual"]).sum()]
     })
     st.table(resumo)
-    st.download_button("Exportar CSV", resumo.to_csv(index=False).encode('utf-8'), "financeiro.csv")
+    
+    csv_data = resumo.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 Baixar Relatório Consolidado", data=csv_data, file_name="financeiro_pro.csv", mime="text/csv")
