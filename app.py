@@ -27,7 +27,13 @@ st.markdown("""
 .stMetric { background: #161B22; border: 1px solid #30363D; padding: 15px; border-radius: 16px; }
 div[data-testid="stDataFrame"] { border-radius: 12px; overflow: hidden; }
 h1, h2, h3 { color: white; }
-.card { background: linear-gradient(145deg, #161B22, #0E1117); border: 1px solid #30363D; padding: 18px; border-radius: 18px; box-shadow: 0 0 25px rgba(0,0,0,0.4); }
+.card {
+    background: linear-gradient(145deg, #161B22, #0E1117);
+    border: 1px solid #30363D;
+    padding: 18px;
+    border-radius: 18px;
+    box-shadow: 0 0 25px rgba(0,0,0,0.4);
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -40,43 +46,28 @@ if "logado" not in st.session_state:
 if "pagina" not in st.session_state:
     st.session_state.pagina = "Dashboard"
 
-USUARIO = "giovanne"
-SENHA = "8708"
+USUARIO, SENHA = "giovanne", "8708"
 
 if not st.session_state.logado:
     st.title("🔐 Financeiro PRO")
     with st.form("login"):
-        usuario = st.text_input("Usuário")
-        senha = st.text_input("Senha", type="password")
+        u = st.text_input("Usuário")
+        s = st.text_input("Senha", type="password")
         if st.form_submit_button("Entrar"):
-            if usuario == USUARIO and senha == SENHA:
+            if u == USUARIO and s == SENHA:
                 st.session_state.logado = True
                 st.rerun()
             else:
-                st.error("❌ Usuário ou senha inválidos.")
+                st.error("Usuário ou senha inválidos.")
     st.stop()
 
 # =========================================================
-# FUNÇÕES
+# FUNÇÕES E BASES
 # =========================================================
 
 def criar_csv(file, cols):
-    path = Path(file)
-    if not path.exists():
-        df = pd.DataFrame(columns=cols)
-        df.to_csv(file, index=False)
-        return df
-    
-    try:
-        df = pd.read_csv(file)
-        if list(df.columns) != cols:
-            df = pd.DataFrame(columns=cols)
-            df.to_csv(file, index=False)
-        return df
-    except:
-        df = pd.DataFrame(columns=cols)
-        df.to_csv(file, index=False)
-        return df
+    if not Path(file).exists():
+        pd.DataFrame(columns=cols).to_csv(file, index=False)
 
 @st.cache_data
 def load_csv(file):
@@ -87,16 +78,20 @@ def save_csv(df, file):
     load_csv.clear()
 
 def moeda(valor):
-    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"R$ {valor:,.2f}"
 
-# =========================================================
-# CRIAR BASES
-# =========================================================
+def card(titulo, valor):
+    st.markdown(f'<div class="card"><h4>{titulo}</h4><h2>{valor}</h2></div>', unsafe_allow_html=True)
 
-receitas = criar_csv("receitas.csv", ["data", "categoria", "valor"])
-despesas = criar_csv("despesas.csv", ["data", "categoria", "valor"])
-fixos = criar_csv("fixos.csv", ["descricao", "valor_parcela", "parcelas_total", "parcelas_pagas"])
-investimentos = criar_csv("investimentos.csv", ["ativo", "tipo", "quantidade", "preco_medio", "valor_atual"])
+criar_csv("receitas.csv", ["data", "categoria", "descricao", "valor"])
+criar_csv("despesas.csv", ["data", "categoria", "descricao", "valor"])
+criar_csv("fixos.csv", ["descricao", "valor_parcela", "parcelas_total", "parcelas_pagas"])
+criar_csv("investimentos.csv", ["ativo", "tipo", "quantidade", "preco_medio", "valor_atual"])
+
+receitas = load_csv("receitas.csv")
+despesas = load_csv("despesas.csv")
+fixos = load_csv("fixos.csv")
+investimentos = load_csv("investimentos.csv")
 
 # =========================================================
 # SIDEBAR
@@ -106,293 +101,150 @@ st.sidebar.title("💼 Financeiro PRO")
 menu = ["Dashboard", "Receitas", "Despesas", "Fixos", "Investimentos", "Relatórios"]
 pagina = st.sidebar.radio("Menu", menu, index=menu.index(st.session_state.pagina))
 st.session_state.pagina = pagina
-st.sidebar.markdown("---")
+
 if st.sidebar.button("🚪 Sair"):
-    for k in list(st.session_state.keys()):
-        del st.session_state[k]
+    for k in list(st.session_state.keys()): del st.session_state[k]
     st.rerun()
 
 # =========================================================
-# DASHBOARD
+# PÁGINAS
 # =========================================================
 
 if pagina == "Dashboard":
     st.title("📊 Dashboard Financeiro")
     
-    total_receitas = receitas["valor"].sum()
-    total_despesas = despesas["valor"].sum()
-    total_fixos = (fixos["valor_parcela"] * (fixos["parcelas_total"] - fixos["parcelas_pagas"])).sum()
-    patrimonio = (investimentos["valor_atual"] * investimentos["quantidade"]).sum()
-    saldo = total_receitas - total_despesas - total_fixos
-    
-    def card(titulo, valor):
-        st.markdown(f"""
-        <div class="card">
-            <h4>{titulo}</h4>
-            <h2>{valor}</h2>
-        </div>
-        """, unsafe_allow_html=True)
-    
+    t_rec = receitas["valor"].sum()
+    t_des = despesas["valor"].sum()
+    t_fix = (fixos["valor_parcela"] * (fixos["parcelas_total"] - fixos["parcelas_pagas"])).sum()
+    patrim = (investimentos["valor_atual"] * investimentos["quantidade"]).sum()
+    saldo = t_rec - t_des - t_fix
+
     c1, c2, c3, c4, c5 = st.columns(5)
-    with c1: card("💰 Receitas", moeda(total_receitas))
-    with c2: card("💸 Despesas", moeda(total_despesas))
-    with c3: card("📌 Dívidas/Fixos", moeda(total_fixos))
-    with c4: card("🏦 Livre", moeda(saldo))
-    with c5: card("📈 Patrimônio", moeda(patrimonio))
-    
+    with c1: card("💰 Receitas", moeda(t_rec))
+    with c2: card("💸 Despesas", moeda(t_des))
+    with c3: card("📌 Fixos", moeda(t_fix))
+    with c4: card("🏦 Saldo", moeda(saldo))
+    with c5: card("📈 Patrimônio", moeda(patrim))
+
     st.markdown("##")
-    
     p1, p2 = st.columns(2)
     p1.success(f"📈 Projeção 6 meses: {moeda(saldo * 6)}")
     p2.success(f"🚀 Projeção 12 meses: {moeda(saldo * 12)}")
-    
+
     st.markdown("##")
-    
     g1, g2 = st.columns(2)
     with g1:
-        grafico = pd.DataFrame({
-            "Categoria": ["Receitas", "Despesas", "Fixos", "Investimentos"],
-            "Valor": [total_receitas, total_despesas, total_fixos, patrimonio]
-        })
-        fig = px.bar(grafico, x="Categoria", y="Valor", text_auto=True)
-        fig.update_layout(template="plotly_dark", height=400)
+        fig = px.bar(x=["Receitas", "Despesas", "Fixos"], y=[t_rec, t_des, t_fix], template="plotly_dark", title="Resumo Mensal")
         st.plotly_chart(fig, use_container_width=True)
-    
     with g2:
-        pizza = pd.DataFrame({
-            "Categoria": ["Despesas", "Fixos", "Investimentos"],
-            "Valor": [total_despesas, total_fixos, patrimonio]
-        })
-        fig2 = px.pie(pizza, names="Categoria", values="Valor", hole=0.5)
-        fig2.update_layout(template="plotly_dark", height=400)
+        fig2 = px.pie(names=["Despesas", "Fixos", "Invest."], values=[t_des, t_fix, patrim], hole=0.5, template="plotly_dark")
         st.plotly_chart(fig2, use_container_width=True)
-
-# =========================================================
-# RECEITAS
-# =========================================================
 
 elif pagina == "Receitas":
     st.title("💰 Receitas")
-    
-    with st.form("receitas_form", clear_on_submit=True):
+    with st.form("rec_form", clear_on_submit=True):
         c1, c2 = st.columns(2)
-        with c1:
-            data = st.date_input("Data", date.today())
-            categoria = st.selectbox("Categoria", ["Salário", "Freelance", "Investimentos", "Extra", "Outros"])
-        with c2:
-            valor = st.number_input("Valor", min_value=0.0, format="%.2f")
-        if st.form_submit_button("Adicionar Receita"):
-            nova = pd.DataFrame([{"data": data, "categoria": categoria, "valor": valor}])
-            global receitas
-            receitas = pd.concat([receitas, nova], ignore_index=True)
-            save_csv(receitas, "receitas.csv")
-            st.success("✅ Receita adicionada!")
-    
-    st.markdown("## 📋 Receitas lançadas")
-    if not receitas.empty:
-        receitas_display = receitas.copy()
-        receitas_display["data"] = pd.to_datetime(receitas_display["data"]).dt.strftime('%d/%m/%Y')
-        st.dataframe(receitas_display, use_container_width=True)
-        
-        # Deletar
-        for idx in receitas.index:
-            col1, col2, col3, col4 = st.columns([1, 3, 2, 1])
-            col1.write(idx)
-            col2.write(f"{receitas.loc[idx, 'data']} - {receitas.loc[idx, 'categoria']}")
-            col3.write(moeda(receitas.loc[idx, 'valor']))
-            if col4.button("🗑️", key=f"del_rec_{idx}"):
-                global receitas
-                receitas = receitas.drop(idx).reset_index(drop=True)
-                save_csv(receitas, "receitas.csv")
-                st.rerun()
+        d = c1.date_input("Data", date.today())
+        cat = c1.selectbox("Categoria", ["Salário", "Freelance", "Investimentos", "Extra"])
+        desc = c2.text_input("Descrição")
+        val = c2.number_input("Valor", min_value=0.0)
+        if st.form_submit_button("Salvar"):
+            nova = pd.DataFrame([{"data": str(d), "categoria": cat, "descricao": desc, "valor": val}])
+            save_csv(pd.concat([receitas, nova]), "receitas.csv")
+            st.rerun()
 
-# =========================================================
-# DESPESAS
-# =========================================================
+    st.markdown("### 📋 Lançamentos")
+    df_r = pd.read_csv("receitas.csv")
+    for i, row in df_r.iterrows():
+        cols = st.columns([1, 2, 3, 2, 1])
+        cols[0].write(i)
+        cols[1].write(row["data"])
+        cols[2].write(row["descricao"])
+        cols[3].write(moeda(row["valor"]))
+        if cols[4].button("🗑️", key=f"del_r_{i}"):
+            save_csv(df_r.drop(i), "receitas.csv")
+            st.rerun()
 
 elif pagina == "Despesas":
     st.title("💸 Despesas")
-    
-    with st.form("despesas_form", clear_on_submit=True):
+    with st.form("desp_form", clear_on_submit=True):
         c1, c2 = st.columns(2)
-        with c1:
-            data = st.date_input("Data", date.today())
-            categoria = st.selectbox("Categoria", ["Alimentação", "Saúde", "Lazer", "Transporte", "Moradia", "Educação", "Compras", "Internet", "Streaming", "Viagem", "Outros"])
-        with c2:
-            valor = st.number_input("Valor", min_value=0.0, format="%.2f")
-        if st.form_submit_button("Adicionar Despesa"):
-            nova = pd.DataFrame([{"data": data, "categoria": categoria, "valor": valor}])
-            global despesas
-            despesas = pd.concat([despesas, nova], ignore_index=True)
-            save_csv(despesas, "despesas.csv")
-            st.success("✅ Despesa adicionada!")
-    
-    st.markdown("## 📋 Despesas lançadas")
-    if not despesas.empty:
-        despesas_display = despesas.copy()
-        despesas_display["data"] = pd.to_datetime(despesas_display["data"]).dt.strftime('%d/%m/%Y')
-        st.dataframe(despesas_display, use_container_width=True)
-        
-        # Deletar
-        for idx in despesas.index:
-            col1, col2, col3, col4 = st.columns([1, 3, 2, 1])
-            col1.write(idx)
-            col2.write(f"{despesas.loc[idx, 'data']} - {despesas.loc[idx, 'categoria']}")
-            col3.write(moeda(despesas.loc[idx, 'valor']))
-            if col4.button("🗑️", key=f"del_des_{idx}"):
-                global despesas
-                despesas = despesas.drop(idx).reset_index(drop=True)
-                save_csv(despesas, "despesas.csv")
-                st.rerun()
+        d = c1.date_input("Data", date.today())
+        cat = c1.selectbox("Categoria", ["Alimentação", "Transporte", "Lazer", "Saúde", "Outros"])
+        desc = c2.text_input("Descrição")
+        val = c2.number_input("Valor", min_value=0.0)
+        if st.form_submit_button("Salvar"):
+            nova = pd.DataFrame([{"data": str(d), "categoria": cat, "descricao": desc, "valor": val}])
+            save_csv(pd.concat([despesas, nova]), "despesas.csv")
+            st.rerun()
 
-# =========================================================
-# FIXOS
-# =========================================================
+    st.markdown("### 📋 Lançamentos")
+    df_d = pd.read_csv("despesas.csv")
+    for i, row in df_d.iterrows():
+        cols = st.columns([1, 2, 3, 2, 1])
+        cols[0].write(i)
+        cols[1].write(row["data"])
+        cols[2].write(row["descricao"])
+        cols[3].write(moeda(row["valor"]))
+        if cols[4].button("🗑️", key=f"del_d_{i}"):
+            save_csv(df_d.drop(i), "despesas.csv")
+            st.rerun()
 
 elif pagina == "Fixos":
-    st.title("📌 Parcelas e Fixos")
-    
-    with st.form("fixos_form", clear_on_submit=True):
-        descricao = st.text_input("Descrição")
+    st.title("📌 Fixos e Parcelas")
+    with st.form("fixo_form"):
+        desc = st.text_input("Descrição")
         c1, c2, c3 = st.columns(3)
-        with c1: valor = st.number_input("Valor da Parcela", min_value=0.0, format="%.2f")
-        with c2: parcelas_total = st.number_input("Parcelas Totais", min_value=1, step=1)
-        with c3: parcelas_pagas = st.number_input("Parcelas Pagas", min_value=0, step=1)
+        v = c1.number_input("Valor Parcela")
+        tt = c2.number_input("Total Parcelas", min_value=1)
+        pg = c3.number_input("Pagas", min_value=0)
         if st.form_submit_button("Adicionar"):
-            nova = pd.DataFrame([{
-                "descricao": descricao, "valor_parcela": valor,
-                "parcelas_total": parcelas_total, "parcelas_pagas": parcelas_pagas
-            }])
-            global fixos
-            fixos = pd.concat([fixos, nova], ignore_index=True)
-            save_csv(fixos, "fixos.csv")
-            st.success("✅ Parcela adicionada!")
-    
-    st.markdown("##")
-    if not fixos.empty:
-        fixos["faltam"] = fixos["parcelas_total"] - fixos["parcelas_pagas"]
-        fixos["valor_restante"] = fixos["faltam"] * fixos["valor_parcela"]
-        
-        for idx in fixos.index:
-            row = fixos.loc[idx]
-            progresso = row["parcelas_pagas"] / row["parcelas_total"]
-            st.markdown(f"### {row['descricao']}")
-            st.progress(float(progresso))
-            c1, c2, c3 = st.columns(3)
-            c1.info(f"Parcelas: {int(row['parcelas_pagas'])}/{int(row['parcelas_total'])}")
-            c2.warning(f"Faltam: {int(row['faltam'])}")
-            c3.error(f"Restante: {moeda(row['valor_restante'])}")
-            
-            if st.button(f"✅ Pagar Parcela", key=f"pagar_fix_{idx}"):
-                if row["parcelas_pagas"] < row["parcelas_total"]:
-                    global fixos
-                    fixos.loc[idx, "parcelas_pagas"] += 1
-                    save_csv(fixos, "fixos.csv")
-                    st.success("✅ Parcela paga!")
-                    st.rerun()
-    
-    if st.button("💾 Salvar todas as alterações"):
-        save_csv(fixos, "fixos.csv")
-        st.success("✅ Dados salvos!")
+            nova = pd.DataFrame([{"descricao": desc, "valor_parcela": v, "parcelas_total": tt, "parcelas_pagas": pg}])
+            save_csv(pd.concat([fixos, nova]), "fixos.csv")
+            st.rerun()
 
-# =========================================================
-# INVESTIMENTOS
-# =========================================================
+    for i, row in fixos.iterrows():
+        st.write(f"**{row['descricao']}**")
+        st.progress(min(row['parcelas_pagas']/row['parcelas_total'], 1.0))
+        c1, c2, c3 = st.columns(3)
+        c1.info(f"Pagas: {int(row['parcelas_pagas'])}/{int(row['parcelas_total'])}")
+        c2.error(f"Restante: {moeda((row['parcelas_total']-row['parcelas_pagas'])*row['valor_parcela'])}")
+        if c3.button("✅ Pagar Próxima", key=f"pg_{i}"):
+            fixos.loc[i, "parcelas_pagas"] += 1
+            save_csv(fixos, "fixos.csv")
+            st.rerun()
 
 elif pagina == "Investimentos":
     st.title("📈 Investimentos")
-    
-    with st.form("invest_form", clear_on_submit=True):
+    with st.form("inv_form"):
         c1, c2 = st.columns(2)
-        with c1:
-            ativo = st.text_input("Ativo")
-            tipo = st.selectbox("Tipo", ["Ações", "ETF", "Crypto", "FII", "Renda Fixa", "Tesouro", "Dólar", "Outros"])
-            quantidade = st.number_input("Quantidade", min_value=0.0, format="%.2f")
-        with c2:
-            preco_medio = st.number_input("Preço Médio", min_value=0.0, format="%.2f")
-            valor_atual = st.number_input("Valor Atual", min_value=0.0, format="%.2f")
-        if st.form_submit_button("Adicionar Investimento"):
-            existente = investimentos[investimentos["ativo"] == ativo]
-            global investimentos
-            if not existente.empty:
-                idx = existente.index[0]
-                qtd_antiga = float(investimentos.loc[idx, "quantidade"])
-                preco_antigo = float(investimentos.loc[idx, "preco_medio"])
-                nova_qtd = qtd_antiga + quantidade
-                total_antigo = qtd_antiga * preco_antigo
-                total_novo = quantidade * preco_medio
-                novo_preco_medio = (total_antigo + total_novo) / nova_qtd
-                investimentos.loc[idx, "quantidade"] = nova_qtd
-                investimentos.loc[idx, "preco_medio"] = novo_preco_medio
-                investimentos.loc[idx, "valor_atual"] = valor_atual
-            else:
-                nova = pd.DataFrame([{
-                    "ativo": ativo, "tipo": tipo, "quantidade": quantidade,
-                    "preco_medio": preco_medio, "valor_atual": valor_atual
-                }])
-                investimentos = pd.concat([investimentos, nova], ignore_index=True)
-            save_csv(investimentos, "investimentos.csv")
-            st.success("✅ Investimento adicionado!")
-    
-    st.markdown("##")
-    if not investimentos.empty:
-        investimentos["investido"] = investimentos["quantidade"] * investimentos["preco_medio"]
-        investimentos["patrimonio"] = investimentos["quantidade"] * investimentos["valor_atual"]
-        investimentos["lucro"] = investimentos["patrimonio"] - investimentos["investido"]
-        
-        st.dataframe(investimentos[["ativo", "tipo", "investido", "patrimonio", "lucro"]], use_container_width=True)
-        
-        g1, g2 = st.columns(2)
-        with g1:
-            fig = px.pie(investimentos, names="tipo", values="patrimonio", hole=0.5)
-            fig.update_layout(template="plotly_dark", height=400)
-            st.plotly_chart(fig, use_container_width=True)
-        with g2:
-            fig2 = px.bar(investimentos, x="ativo", y="lucro", text_auto=True)
-            fig2.update_layout(template="plotly_dark", height=400)
-            st.plotly_chart(fig2, use_container_width=True)
-        
-        # Simulador
-        st.markdown("## 🚀 Simulador de Juros Compostos")
-        c1, c2, c3 = st.columns(3)
-        with c1: aporte = st.number_input("Aporte Mensal", value=500.0)
-        with c2: juros = st.number_input("Juros Anual (%)", value=12.0)
-        with c3: anos = st.number_input("Anos", value=10)
-        
-        taxa = juros / 100 / 12
-        meses = anos * 12
-        valor = 0
-        historico = []
-        for mes in range(meses):
-            valor = (valor * (1 + taxa)) + aporte
-            historico.append(valor)
-        
-        st.success(f"💰 Patrimônio Futuro: {moeda(valor)}")
-        grafico = pd.DataFrame({"Mês": list(range(1, meses + 1)), "Valor": historico})
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=grafico["Mês"], y=grafico["Valor"], mode="lines"))
-        fig.update_layout(template="plotly_dark", height=400)
-        st.plotly_chart(fig, use_container_width=True)
+        atv = c1.text_input("Ativo")
+        tp = c1.selectbox("Tipo", ["Ações", "FII", "Crypto", "Renda Fixa"])
+        qtd = c2.number_input("Qtd", min_value=0.0)
+        pm = c2.number_input("Preço Médio")
+        va = c2.number_input("Preço Atual")
+        if st.form_submit_button("Adicionar"):
+            nova = pd.DataFrame([{"ativo": atv, "tipo": tp, "quantidade": qtd, "preco_medio": pm, "valor_atual": va}])
+            save_csv(pd.concat([investimentos, nova]), "investimentos.csv")
+            st.rerun()
 
-# =========================================================
-# RELATÓRIOS
-# =========================================================
+    if not investimentos.empty:
+        st.data_editor(investimentos, use_container_width=True, key="edit_inv")
+        st.subheader("🚀 Simulador de Juros Compostos")
+        c1, c2, c3 = st.columns(3)
+        ap, jr, an = c1.number_input("Aporte", 500.0), c2.number_input("Juros % (Ano)", 12.0), c3.number_input("Anos", 10)
+        m_val, hist = 0, []
+        for m in range(int(an*12)):
+            m_val = (m_val * (1 + (jr/100/12))) + ap
+            hist.append(m_val)
+        st.success(f"Patrimônio Estimado: {moeda(m_val)}")
+        st.line_chart(hist)
 
 elif pagina == "Relatórios":
     st.title("📑 Relatórios")
-    
-    total_receitas = receitas["valor"].sum()
-    total_despesas = despesas["valor"].sum()
-    total_fixos = (fixos["valor_parcela"] * (fixos["parcelas_total"] - fixos["parcelas_pagas"])).sum()
-    patrimonio = (investimentos["valor_atual"] * investimentos["quantidade"]).sum()
-    saldo = total_receitas - total_despesas - total_fixos
-    
-    relatorio = pd.DataFrame({
-        "Indicador": ["Receitas", "Despesas", "Fixos", "Saldo", "Patrimônio"],
-        "Valor": [total_receitas, total_despesas, total_fixos, saldo, patrimonio]
+    resumo = pd.DataFrame({
+        "Indicador": ["Receitas", "Despesas", "Fixos", "Patrimônio"],
+        "Total": [receitas["valor"].sum(), despesas["valor"].sum(), (fixos["valor_parcela"]*(fixos["parcelas_total"]-fixos["parcelas_pagas"])).sum(), (investimentos["quantidade"]*investimentos["valor_atual"]).sum()]
     })
-    
-    st.dataframe(relatorio.style.format({"Valor": moeda}), use_container_width=True)
-    
-    csv = relatorio.to_csv(index=False).encode("utf-8")
-    st.download_button("⬇️ Baixar Relatório CSV", data=csv, file_name="relatorio.csv", mime="text/csv")
+    st.table(resumo)
+    st.download_button("Exportar CSV", resumo.to_csv(index=False).encode('utf-8'), "financeiro.csv")
