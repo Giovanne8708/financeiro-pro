@@ -58,6 +58,9 @@ h1, h2, h3 {
 if "logado" not in st.session_state:
     st.session_state.logado = False
 
+if "pagina" not in st.session_state:
+    st.session_state.pagina = "Dashboard"
+
 USUARIO = "giovanne"
 SENHA = "8708"
 
@@ -134,12 +137,12 @@ def moeda(valor):
 
 criar_csv(
     "receitas.csv",
-    ["data", "categoria", "descricao", "valor"]
+    ["data", "categoria", "descricao", "valor", "conta"]
 )
 
 criar_csv(
     "despesas.csv",
-    ["data", "categoria", "descricao", "valor"]
+    ["data", "categoria", "descricao", "valor", "conta"]
 )
 
 criar_csv(
@@ -178,9 +181,7 @@ investimentos = load_csv("investimentos.csv")
 
 st.sidebar.title("💼 Financeiro PRO")
 
-pagina = st.sidebar.radio(
-    "Menu",
-    [
+menu = [
         "Dashboard",
         "Receitas",
         "Despesas",
@@ -188,13 +189,20 @@ pagina = st.sidebar.radio(
         "Investimentos",
         "Relatórios"
     ]
+
+pagina = st.sidebar.radio(
+    "Menu",
+    menu,
+    index=menu.index(st.session_state.pagina)
 )
+st.session_state.pagina = pagina
 
 st.sidebar.markdown("---")
 
 if st.sidebar.button("🚪 Sair"):
 
-    st.session_state.logado = False
+    for k in list(st.session_state.keys()):
+        del st.session_state[k]
     st.rerun()
 
 # =========================================================
