@@ -255,22 +255,22 @@ if pagina == "Dashboard":
     )
 
     
-def card(titulo, valor):
-    st.markdown(f"""
-    <div class="card">
-        <h4>{titulo}</h4>
-        <h2>{valor}</h2>
-    </div>
-    """, unsafe_allow_html=True)
+    def card(titulo, valor):
+        st.markdown(f"""
+        <div class="card">
+            <h4>{titulo}</h4>
+            <h2>{valor}</h2>
+        </div>
+        """, unsafe_allow_html=True)
 
-c1, c2, c3, c4, c5 = st.columns(5)
+    c1, c2, c3, c4, c5 = st.columns(5)
 
-with c1: card("💰 Receitas", moeda(total_receitas))
-with c2: card("💸 Despesas", moeda(total_despesas))
-with c3: card("📌 Dívidas/Fixos", moeda(total_fixos))
-with c4: card("🏦 Saldo", moeda(saldo))
-with c5: card("📈 Patrimônio", moeda(patrimonio))
-st.markdown("##")
+    with c1: card("💰 Receitas", moeda(total_receitas))
+    with c2: card("💸 Despesas", moeda(total_despesas))
+    with c3: card("📌 Dívidas/Fixos", moeda(total_fixos))
+    with c4: card("🏦 Saldo", moeda(saldo))
+    with c5: card("📈 Patrimônio", moeda(patrimonio))
+    st.markdown("##")
 
     # =====================================================
     # PROJEÇÕES
@@ -354,8 +354,8 @@ st.markdown("##")
             pizza,
             names="Categoria",
             values="Valor",
-            hole=0.5
-        )
+                hole=0.5
+            )
 
         fig2.update_layout(
             template="plotly_dark",
@@ -366,7 +366,6 @@ st.markdown("##")
             fig2,
             use_container_width=True
         )
-
 # =========================================================
 # RECEITAS
 # =========================================================
@@ -432,30 +431,29 @@ elif pagina == "Receitas":
     st.markdown("##")
 
     
-st.markdown("## 📋 Receitas lançadas")
+    st.markdown("## 📋 Receitas lançadas")
 
-df = pd.read_csv("receitas.csv").reset_index()
+    df = pd.read_csv("receitas.csv").reset_index()
 
-for i, row in df.iterrows():
-    c1, c2, c3, c4, c5, c6 = st.columns([1,2,2,2,2,1])
+    for i, row in df.iterrows():
+        c1, c2, c3, c4, c5, c6 = st.columns([1,2,2,2,2,1])
 
-    c1.write(row["index"])
-    c2.write(row["data"])
-    c3.write(row["categoria"])
-    c4.write(row["descricao"])
-    c5.write(moeda(row["valor"]))
+        c1.write(row["index"])
+        c2.write(row["data"])
+        c3.write(row["categoria"])
+        c4.write(row["descricao"])
+        c5.write(moeda(row["valor"]))
 
-    if c6.button("🗑️", key=f"del_rec_{i}"):
-        df = df.drop(i)
-        df.drop(columns=["index"]).to_csv("receitas.csv", index=False)
-        st.rerun()
+        if c6.button("🗑️", key=f"del_rec_{i}"):
+            df = df.drop(i)
+            df.drop(columns=["index"]).to_csv("receitas.csv", index=False)
+            st.rerun()
 
 
-    if st.button("💾 Salvar Receitas"):
+        if st.button("💾 Salvar Receitas"):
 
-        save_csv(edit, "receitas.csv")
-        st.success("Receitas atualizadas!")
-
+            save_csv(edit, "receitas.csv")
+            st.success("Receitas atualizadas!")
 # =========================================================
 # DESPESAS
 # =========================================================
@@ -527,30 +525,29 @@ elif pagina == "Despesas":
     st.markdown("##")
 
     
-st.markdown("## 📋 Despesas lançadas")
+    st.markdown("## 📋 Despesas lançadas")
 
-df = pd.read_csv("despesas.csv").reset_index()
+    df = pd.read_csv("despesas.csv").reset_index()
 
-for i, row in df.iterrows():
-    c1, c2, c3, c4, c5, c6 = st.columns([1,2,2,2,2,1])
+    for i, row in df.iterrows():
+        c1, c2, c3, c4, c5, c6 = st.columns([1,2,2,2,2,1])
 
-    c1.write(row["index"])
-    c2.write(row["data"])
-    c3.write(row["categoria"])
-    c4.write(row["descricao"])
-    c5.write(moeda(row["valor"]))
+        c1.write(row["index"])
+        c2.write(row["data"])
+        c3.write(row["categoria"])
+        c4.write(row["descricao"])
+        c5.write(moeda(row["valor"]))
 
-    if c6.button("🗑️", key=f"del_des_{i}"):
-        df = df.drop(i)
-        df.drop(columns=["index"]).to_csv("despesas.csv", index=False)
-        st.rerun()
+        if c6.button("🗑️", key=f"del_des_{i}"):
+            df = df.drop(i)
+            df.drop(columns=["index"]).to_csv("despesas.csv", index=False)
+            st.rerun()
 
 
-    if st.button("💾 Salvar Despesas"):
+        if st.button("💾 Salvar Despesas"):
 
-        save_csv(edit, "despesas.csv")
-        st.success("Despesas atualizadas!")
-
+            save_csv(edit, "despesas.csv")
+            st.success("Despesas atualizadas!")
 # =========================================================
 # FIXOS / PARCELAS
 # =========================================================
