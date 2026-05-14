@@ -48,6 +48,24 @@ h1, h2, h3 {
     color: white;
 }
 
+
+/* CARDS BONITOS */
+.card {
+    background: linear-gradient(145deg, #161B22, #0E1117);
+    border: 1px solid #30363D;
+    padding: 18px;
+    border-radius: 18px;
+    box-shadow: 0 0 25px rgba(0,0,0,0.4);
+}
+
+/* Botões flutuantes */
+.float-btn {
+    position: fixed;
+    right: 25px;
+    bottom: 25px;
+    z-index: 9999;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -236,34 +254,23 @@ if pagina == "Dashboard":
         total_fixos
     )
 
-    c1, c2, c3, c4, c5 = st.columns(5)
+    
+def card(titulo, valor):
+    st.markdown(f"""
+    <div class="card">
+        <h4>{titulo}</h4>
+        <h2>{valor}</h2>
+    </div>
+    """, unsafe_allow_html=True)
 
-    c1.metric(
-        "💰 Receitas",
-        moeda(total_receitas)
-    )
+c1, c2, c3, c4, c5 = st.columns(5)
 
-    c2.metric(
-        "💸 Despesas",
-        moeda(total_despesas)
-    )
-
-    c3.metric(
-        "📌 Dívidas/Fixos",
-        moeda(total_fixos)
-    )
-
-    c4.metric(
-        "🏦 Saldo",
-        moeda(saldo)
-    )
-
-    c5.metric(
-        "📈 Patrimônio",
-        moeda(patrimonio)
-    )
-
-    st.markdown("##")
+with c1: card("💰 Receitas", moeda(total_receitas))
+with c2: card("💸 Despesas", moeda(total_despesas))
+with c3: card("📌 Dívidas/Fixos", moeda(total_fixos))
+with c4: card("🏦 Saldo", moeda(saldo))
+with c5: card("📈 Patrimônio", moeda(patrimonio))
+st.markdown("##")
 
     # =====================================================
     # PROJEÇÕES
@@ -424,11 +431,25 @@ elif pagina == "Receitas":
 
     st.markdown("##")
 
-    edit = st.data_editor(
-        receitas,
-        use_container_width=True,
-        num_rows="dynamic"
-    )
+    
+st.markdown("## 📋 Receitas lançadas")
+
+df = pd.read_csv("receitas.csv").reset_index()
+
+for i, row in df.iterrows():
+    c1, c2, c3, c4, c5, c6 = st.columns([1,2,2,2,2,1])
+
+    c1.write(row["index"])
+    c2.write(row["data"])
+    c3.write(row["categoria"])
+    c4.write(row["descricao"])
+    c5.write(moeda(row["valor"]))
+
+    if c6.button("🗑️", key=f"del_rec_{i}"):
+        df = df.drop(i)
+        df.drop(columns=["index"]).to_csv("receitas.csv", index=False)
+        st.rerun()
+
 
     if st.button("💾 Salvar Receitas"):
 
@@ -505,11 +526,25 @@ elif pagina == "Despesas":
 
     st.markdown("##")
 
-    edit = st.data_editor(
-        despesas,
-        use_container_width=True,
-        num_rows="dynamic"
-    )
+    
+st.markdown("## 📋 Despesas lançadas")
+
+df = pd.read_csv("despesas.csv").reset_index()
+
+for i, row in df.iterrows():
+    c1, c2, c3, c4, c5, c6 = st.columns([1,2,2,2,2,1])
+
+    c1.write(row["index"])
+    c2.write(row["data"])
+    c3.write(row["categoria"])
+    c4.write(row["descricao"])
+    c5.write(moeda(row["valor"]))
+
+    if c6.button("🗑️", key=f"del_des_{i}"):
+        df = df.drop(i)
+        df.drop(columns=["index"]).to_csv("despesas.csv", index=False)
+        st.rerun()
+
 
     if st.button("💾 Salvar Despesas"):
 
