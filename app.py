@@ -255,7 +255,8 @@ if pagina == "Dashboard":
     )
 
     
-    def card(titulo, valor):
+def card(titulo, valor):
+
     st.markdown(f"""
     <div class="card">
         <h4>{titulo}</h4>
