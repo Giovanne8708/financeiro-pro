@@ -75,8 +75,34 @@ st.markdown("""
 
 .stButton>button {
     border-radius: 12px;
-    background: #00d4aa;
-    color: black;
+    background: #00d4aa !important;
+    color: #000000 !important;
+    font-weight: 800 !important;
+    font-size: 15px !important;
+    border: none;
+    height: 48px;
+    width: 100%;
+}
+
+.stButton>button p {
+    color: #000000 !important;
+}
+
+[data-testid="metric-container"] {
+    background: #141b2d;
+    border: 1px solid rgba(255,255,255,0.06);
+    padding: 18px;
+    border-radius: 18px;
+    box-shadow: 0 0 15px rgba(0,0,0,0.2);
+}
+
+[data-testid="metric-container"] label {
+    color: #9ca3af !important;
+}
+
+[data-testid="metric-container"] [data-testid="stMetricValue"] {
+    color: #00e0b8 !important;
+}
     border: none;
     font-weight: 700;
     height: 48px;
