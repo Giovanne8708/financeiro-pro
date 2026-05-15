@@ -1,176 +1,717 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from datetime import date
+from datetime import date, datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from pathlib import Path
 
-# ---------- CONFIGURAÇÃO PREMIUM ----------
-st.set_page_config(page_title="Financeiro PRO | Assistente", layout="wide")
+# =====================================================
+# CONFIG
+# =====================================================
+st.set_page_config(
+    page_title="Financeiro PRO",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
-# CSS customizado para visual "Banking App"
+# =====================================================
+# CSS PREMIUM
+# =====================================================
 st.markdown("""
 <style>
-    .stApp {background-color: #0e1117; color: #ffffff}
-    [data-testid="stMetricValue"] {font-size: 1.8rem; color: #00d1b2; font-weight: 700}
-    .main-card {
-        background-color: #161b22; 
-        padding: 20px; 
-        border-radius: 12px; 
-        border: 1px solid #30363d;
-        margin-bottom: 15px;
-    }
-    .alert-card {
-        background-color: #2a1215;
-        border: 1px solid #f85149;
-        padding: 12px;
-        border-radius: 8px;
-        color: #ff7b72;
-        margin-bottom: 15px;
-        font-weight: bold;
-    }
-    .stButton>button {width: 100%; border-radius: 8px; background-color: #00d1b2; color: #000; font-weight: bold; border: none}
+
+.stApp {
+    background: #0b0f19;
+    color: white;
+}
+
+.block-container {
+    padding-top: 1rem;
+}
+
+.main-card {
+    background: linear-gradient(145deg, #121826, #161d2e);
+    padding: 22px;
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.05);
+    box-shadow: 0 0 20px rgba(0,0,0,0.2);
+}
+
+.metric-card {
+    background: #141b2d;
+    padding: 18px;
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.06);
+}
+
+.alert-danger {
+    background: rgba(255, 59, 48, 0.15);
+    border: 1px solid #ff3b30;
+    padding: 15px;
+    border-radius: 14px;
+    margin-bottom: 12px;
+}
+
+.alert-warning {
+    background: rgba(255, 149, 0, 0.12);
+    border: 1px solid #ff9500;
+    padding: 15px;
+    border-radius: 14px;
+    margin-bottom: 12px;
+}
+
+.alert-success {
+    background: rgba(52, 199, 89, 0.12);
+    border: 1px solid #34c759;
+    padding: 15px;
+    border-radius: 14px;
+    margin-bottom: 12px;
+}
+
+[data-testid="stMetricValue"] {
+    font-size: 1.8rem;
+    color: #00e0b8;
+}
+
+.stButton>button {
+    border-radius: 12px;
+    background: #00d4aa;
+    color: black;
+    border: none;
+    font-weight: 700;
+    height: 48px;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
-# ---------- GESTÃO DE DADOS BLINDADA ----------
-ARQS = {
-    "receitas.csv": ["data", "origem", "valor", "conta"],
-    "despesas.csv": ["data", "categoria", "descricao", "valor", "conta", "paga"],
-    "cartoes.csv": ["banco_cartao", "limite", "vencimento"],
-    "investimentos.csv": ["ativo", "valor", "tipo"],
-    "patrimonio.csv": ["salario", "extra", "inter", "itau"],
-    "parcelamentos.csv": ["descricao", "valor_total", "valor_parcela", "total_parc", "cartao", "data_inicio"]
+# =====================================================
+# DATABASE CSV
+# =====================================================
+ARQUIVOS = {
+    "receitas.csv": ["data", "descricao", "valor", "conta"],
+    "despesas.csv": ["data", "categoria", "descricao", "valor", "conta", "paga", "tipo"],
+    "cartoes.csv": ["cartao", "limite", "fechamento", "vencimento"],
+    "parcelamentos.csv": [
+        "descricao",
+        "cartao",
+        "valor_total",
+        "valor_parcela",
+        "parcela_atual",
+        "total_parcelas",
+        "data"
+    ],
+    "investimentos.csv": ["data", "ativo", "tipo", "valor"],
+    "patrimonio.csv": ["inter", "itau", "salario", "extra"],
+    "fixos.csv": ["descricao", "valor", "dia", "categoria"]
 }
 
-def init_db():
-    for arq, colunas in ARQS.items():
-        if not Path(arq).exists():
-            pd.DataFrame(columns=colunas).to_csv(arq, index=False)
-        else:
-            df = pd.read_csv(arq)
-            mudou = False
-            for col in colunas:
-                if col not in df.columns:
-                    # Define valores padrão para evitar campos vazios
-                    df[col] = False if col == "paga" else (0.0 if "valor" in col or col in ["salario", "extra", "inter", "itau", "limite"] else "")
-                    mudou = True
-            if mudou:
-                df.to_csv(arq, index=False)
 
-def load(arq):
+def criar_banco():
+    for arq, cols in ARQUIVOS.items():
+        if not Path(arq).exists():
+            pd.DataFrame(columns=cols).to_csv(arq, index=False)
+
+
+criar_banco()
+
+
+# =====================================================
+# LOAD
+# =====================================================
+def carregar(nome):
     try:
-        df = pd.read_csv(arq)
-        if df.empty:
-            return pd.DataFrame(columns=ARQS[arq])
-        if "data" in df.columns: 
-            df["data"] = pd.to_datetime(df["data"]).dt.date
-        if "paga" in df.columns: 
-            df["paga"] = df["paga"].fillna(False).astype(bool)
+        df = pd.read_csv(nome)
+
+        if "data" in df.columns:
+            df["data"] = pd.to_datetime(df["data"], errors="coerce")
+
         return df
     except:
-        return pd.DataFrame(columns=ARQS[arq])
+        return pd.DataFrame(columns=ARQUIVOS[nome])
 
-init_db()
-desp, rec, cart, inv, pat, parc = load("despesas.csv"), load("receitas.csv"), load("cartoes.csv"), load("investimentos.csv"), load("patrimonio.csv"), load("parcelamentos.csv")
 
-# ---------- INTELIGÊNCIA DE CÁLCULO (Com tratamento para zeros) ----------
-hoje = date.today()
-mes_atual = hoje.month
+receitas = carregar("receitas.csv")
+despesas = carregar("despesas.csv")
+cartoes = carregar("cartoes.csv")
+parcelamentos = carregar("parcelamentos.csv")
+investimentos = carregar("investimentos.csv")
+patrimonio = carregar("patrimonio.csv")
+fixos = carregar("fixos.csv")
 
-# Garantia de valores numéricos para evitar erros de exibição
-v_salario = float(pat["salario"].iloc[0]) if not pat.empty else 0.0
-v_extra = float(pat["extra"].iloc[0]) if not pat.empty else 0.0
-v_inter = float(pat["inter"].iloc[0]) if not pat.empty else 0.0
-v_itau = float(pat["itau"].iloc[0]) if not pat.empty else 0.0
-renda_total = v_salario + v_extra
 
-gastos_mes = desp[(pd.to_datetime(desp['data']).dt.month == mes_atual)]["valor"].sum()
-saldo_real = rec["valor"].sum() - desp[desp["paga"] == True]["valor"].sum()
-comprometimento = (gastos_mes / renda_total * 100) if renda_total > 0 else 0.0
+# =====================================================
+# VARIÁVEIS
+# =====================================================
+hoje = datetime.now()
+mes = hoje.month
+ano = hoje.year
 
-# ---------- NAVEGAÇÃO ----------
-if "pg" not in st.session_state: st.session_state.pg = "Home"
+
+# =====================================================
+# PATRIMÔNIO
+# =====================================================
+if patrimonio.empty:
+    patrimonio = pd.DataFrame([[0, 0, 0, 0]], columns=ARQUIVOS["patrimonio.csv"])
+
+saldo_inter = float(patrimonio.iloc[0]["inter"])
+saldo_itau = float(patrimonio.iloc[0]["itau"])
+salario = float(patrimonio.iloc[0]["salario"])
+renda_extra = float(patrimonio.iloc[0]["extra"])
+
+
+# =====================================================
+# FILTROS MÊS
+# =====================================================
+despesas_mes = despesas[
+    (despesas["data"].dt.month == mes)
+    & (despesas["data"].dt.year == ano)
+]
+
+receitas_mes = receitas[
+    (receitas["data"].dt.month == mes)
+    & (receitas["data"].dt.year == ano)
+]
+
+
+# =====================================================
+# CÁLCULOS INTELIGENTES
+# =====================================================
+receita_total = receitas_mes["valor"].sum() + salario + renda_extra
+
+gastos_total = despesas_mes["valor"].sum()
+
+saldo_real = receita_total - gastos_total + saldo_inter + saldo_itau
+
+comprometimento = (
+    (gastos_total / receita_total) * 100
+    if receita_total > 0 else 0
+)
+
+fatura_cartao = despesas_mes[
+    despesas_mes["conta"].astype(str).str.contains("Cartão", na=False)
+]["valor"].sum()
+
+invest_total = investimentos["valor"].sum()
+
+patrimonio_total = (
+    saldo_inter
+    + saldo_itau
+    + invest_total
+)
+
+# =====================================================
+# ALERTAS
+# =====================================================
+alertas = []
+
+if comprometimento >= 70:
+    alertas.append((
+        "warning",
+        f"⚠️ Você já comprometeu {comprometimento:.1f}% da sua renda este mês."
+    ))
+
+if comprometimento >= 90:
+    alertas.append((
+        "danger",
+        "🚨 Seu orçamento está entrando em zona crítica."
+    ))
+
+# ALERTA CARTÃO
+for _, row in cartoes.iterrows():
+
+    nome = row["cartao"]
+    limite = float(row["limite"])
+
+    uso = despesas_mes[
+        despesas_mes["conta"] == f"Cartão {nome}"
+    ]["valor"].sum()
+
+    if limite > 0:
+        pct = (uso / limite) * 100
+
+        if pct >= 70:
+            alertas.append((
+                "warning",
+                f"💳 O cartão {nome} já consumiu {pct:.1f}% do limite."
+            ))
+
+# PREVISÃO
+media_diaria = gastos_total / hoje.day if hoje.day > 0 else 0
+previsao_final = media_diaria * 30
+
+if previsao_final > receita_total:
+    alertas.append((
+        "danger",
+        "📉 Se continuar nesse ritmo, você fechará o mês negativo."
+    ))
+
+# =====================================================
+# MENU
+# =====================================================
+if "pagina" not in st.session_state:
+    st.session_state.pagina = "Home"
+
 menu = st.columns(5)
-btns = ["🏠 Home", "💳 Cartões", "📊 Inteligência", "📈 Invest", "🏦 Patrimônio"]
-pgs = ["Home", "Cartoes", "Analise", "Invest", "Pat"]
 
-for col, nome, pg in zip(menu, btns, pgs):
-    if col.button(nome): st.session_state.pg = pg
+botoes = [
+    ("🏠 Home", "Home"),
+    ("💳 Cartões", "Cartoes"),
+    ("📊 Inteligência", "Analise"),
+    ("📈 Investimentos", "Investimentos"),
+    ("🏦 Patrimônio", "Patrimonio")
+]
+
+for col, item in zip(menu, botoes):
+    nome, valor = item
+    if col.button(nome):
+        st.session_state.pagina = valor
 
 st.divider()
 
-# ---------- TELA HOME ----------
-if st.session_state.pg == "Home":
-    st.subheader(f"Resumo Financeiro • {hoje.strftime('%B / %Y')}")
-    
-    # Alertas PRO
-    if comprometimento > 70:
-        st.markdown(f'<div class="alert-card">⚠️ ALERTA: {comprometimento:.1f}% da sua renda já está comprometida!</div>', unsafe_allow_html=True)
-    
-    # Cards Principais
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Saldo Disponível", f"R$ {saldo_real:,.2f}")
-    c2.metric("Faturas em Aberto", f"R$ {desp[(desp['conta'].str.contains('Cartão')) & (desp['paga']==False)]['valor'].sum():,.2f}")
-    c3.metric("Renda Comprometida", f"{comprometimento:.1f}%")
-    c4.metric("Patrimônio Total", f"R$ {(v_inter + v_itau + inv['valor'].sum()):,.2f}")
+# =====================================================
+# HOME
+# =====================================================
+if st.session_state.pagina == "Home":
 
-    col_l, col_r = st.columns([2, 1])
-    
-    with col_l:
-        st.markdown("### ⚡ Lançamento Inteligente")
-        with st.form("add_pro", clear_on_submit=True):
-            f1, f2, f3 = st.columns([1, 2, 1])
-            val = f1.number_input("Valor", min_value=0.0, step=10.0)
-            desc = f2.text_input("Descrição / Loja")
-            conta = f3.selectbox("Origem", ["Inter", "Itaú"] + [f"Cartão {b}" for b in cart["banco_cartao"]])
-            
-            f4, f5 = st.columns(2)
-            cat = f4.selectbox("Categoria", ["Alimentação", "Moradia", "Transporte", "Lazer", "Máquinas", "Fixo"])
-            parc_check = f5.checkbox("Esta compra é parcelada?")
-            qtd_p = f5.number_input("Número de Parcelas", 1, 48) if parc_check else 1
-            
-            if st.form_submit_button("Confirmar Transação"):
-                v_p = val / qtd_p
-                novos_dados = []
-                for i in range(qtd_p):
-                    dv = hoje + relativedelta(months=i)
-                    txt = f"{desc} ({i+1}/{qtd_p})" if qtd_p > 1 else desc
-                    novos_dados.append([dv, cat, txt, v_p, conta, False])
-                
-                df_new = pd.DataFrame(novos_dados, columns=ARQS["despesas.csv"])
-                pd.concat([desp, df_new]).to_csv("despesas.csv", index=False)
-                st.success("Lançamento concluído!")
+    st.title("🏦 Financeiro PRO")
+    st.caption("Seu assistente financeiro pessoal inteligente")
+
+    # ALERTAS
+    for tipo, texto in alertas:
+
+        if tipo == "danger":
+            st.markdown(
+                f'<div class="alert-danger">{texto}</div>',
+                unsafe_allow_html=True
+            )
+
+        elif tipo == "warning":
+            st.markdown(
+                f'<div class="alert-warning">{texto}</div>',
+                unsafe_allow_html=True
+            )
+
+        else:
+            st.markdown(
+                f'<div class="alert-success">{texto}</div>',
+                unsafe_allow_html=True
+            )
+
+    # CARDS
+    c1, c2, c3, c4, c5 = st.columns(5)
+
+    c1.metric(
+        "💰 Saldo Real",
+        f"R$ {saldo_real:,.2f}"
+    )
+
+    c2.metric(
+        "💳 Fatura Atual",
+        f"R$ {fatura_cartao:,.2f}"
+    )
+
+    c3.metric(
+        "📉 Salário Comprometido",
+        f"{comprometimento:.1f}%"
+    )
+
+    c4.metric(
+        "📦 Parcelamentos",
+        f"{len(parcelamentos)} ativos"
+    )
+
+    c5.metric(
+        "🏦 Patrimônio",
+        f"R$ {patrimonio_total:,.2f}"
+    )
+
+    st.divider()
+
+    esquerda, direita = st.columns([2, 1])
+
+    # =====================================================
+    # LANÇAMENTO RÁPIDO
+    # =====================================================
+    with esquerda:
+
+        st.subheader("⚡ Lançamento Inteligente")
+
+        with st.form("lancamento"):
+
+            col1, col2 = st.columns(2)
+
+            tipo = col1.selectbox(
+                "Tipo",
+                ["Despesa", "Receita"]
+            )
+
+            valor = col2.number_input(
+                "Valor",
+                min_value=0.0,
+                step=10.0
+            )
+
+            descricao = st.text_input("Descrição")
+
+            categoria = st.selectbox(
+                "Categoria",
+                [
+                    "Alimentação",
+                    "Moradia",
+                    "Transporte",
+                    "Lazer",
+                    "Saúde",
+                    "Fixo",
+                    "Outros"
+                ]
+            )
+
+            conta = st.selectbox(
+                "Conta",
+                ["Inter", "Itaú"] +
+                [f"Cartão {x}" for x in cartoes["cartao"]]
+            )
+
+            parcelado = st.checkbox("Compra parcelada?")
+
+            parcelas = 1
+
+            if parcelado:
+                parcelas = st.number_input(
+                    "Quantidade de parcelas",
+                    2,
+                    48,
+                    2
+                )
+
+            enviar = st.form_submit_button("Salvar")
+
+            if enviar:
+
+                if tipo == "Receita":
+
+                    novo = pd.DataFrame([
+                        [
+                            hoje,
+                            descricao,
+                            valor,
+                            conta
+                        ]
+                    ], columns=ARQUIVOS["receitas.csv"])
+
+                    receitas = pd.concat([receitas, novo])
+                    receitas.to_csv("receitas.csv", index=False)
+
+                else:
+
+                    if parcelado:
+
+                        valor_parcela = valor / parcelas
+
+                        for i in range(parcelas):
+
+                            data_parcela = hoje + relativedelta(months=i)
+
+                            nova = pd.DataFrame([
+                                [
+                                    data_parcela,
+                                    categoria,
+                                    f"{descricao} ({i+1}/{parcelas})",
+                                    valor_parcela,
+                                    conta,
+                                    False,
+                                    "Parcelado"
+                                ]
+                            ], columns=ARQUIVOS["despesas.csv"])
+
+                            despesas = pd.concat([despesas, nova])
+
+                            novo_parc = pd.DataFrame([
+                                [
+                                    descricao,
+                                    conta,
+                                    valor,
+                                    valor_parcela,
+                                    i+1,
+                                    parcelas,
+                                    data_parcela
+                                ]
+                            ], columns=ARQUIVOS["parcelamentos.csv"])
+
+                            parcelamentos = pd.concat([
+                                parcelamentos,
+                                novo_parc
+                            ])
+
+                        parcelamentos.to_csv(
+                            "parcelamentos.csv",
+                            index=False
+                        )
+
+                    else:
+
+                        nova = pd.DataFrame([
+                            [
+                                hoje,
+                                categoria,
+                                descricao,
+                                valor,
+                                conta,
+                                False,
+                                "Única"
+                            ]
+                        ], columns=ARQUIVOS["despesas.csv"])
+
+                        despesas = pd.concat([despesas, nova])
+
+                    despesas.to_csv("despesas.csv", index=False)
+
+                st.success("Movimentação registrada com sucesso")
                 st.rerun()
 
-    with col_r:
-        st.markdown("### 🔔 Próximos Pagamentos")
-        hoje_dt = pd.to_datetime(date.today())
-        pend = desp[desp["paga"] == False].sort_values("data").head(5)
-        if pend.empty:
-            st.info("Tudo em dia por aqui!")
-        for i, r in pend.iterrows():
-            with st.container():
-                st.markdown(f"**{r['descricao']}** \n`R$ {r['valor']:,.2f}` | {r['data']}")
-                if st.button("Marcar como Pago", key=f"pay_{i}"):
-                    desp.at[i, "paga"] = True
-                    desp.to_csv("despesas.csv", index=False)
-                    st.rerun()
+    # =====================================================
+    # CONTAS
+    # =====================================================
+    with direita:
 
-# ---------- TELA PATRIMÔNIO (CORREÇÃO DE CAMPOS VAZIOS) ----------
-elif st.session_state.pg == "Pat":
-    st.title("Gestão de Patrimônio")
+        st.subheader("🔔 Próximos Vencimentos")
+
+        pendentes = despesas[
+            despesas["paga"] == False
+        ].sort_values("data")
+
+        proximas = pendentes.head(5)
+
+        if proximas.empty:
+            st.success("Nenhuma conta pendente")
+
+        for i, row in proximas.iterrows():
+
+            st.markdown(
+                f"""
+                <div class='main-card'>
+                <b>{row['descricao']}</b><br>
+                R$ {row['valor']:,.2f}<br>
+                {row['data'].date()}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+            if st.button("Marcar Pago", key=f"pay{i}"):
+                despesas.at[i, "paga"] = True
+                despesas.to_csv("despesas.csv", index=False)
+                st.rerun()
+
+# =====================================================
+# CARTÕES
+# =====================================================
+elif st.session_state.pagina == "Cartoes":
+
+    st.title("💳 Gestão de Cartões")
+
+    col_a, col_b = st.columns([1, 2])
+
+    with col_a:
+
+        st.subheader("Novo Cartão")
+
+        with st.form("novo_cartao"):
+
+            nome = st.text_input("Nome")
+            limite = st.number_input("Limite")
+            fechamento = st.number_input("Fechamento")
+            vencimento = st.number_input("Vencimento")
+
+            salvar = st.form_submit_button("Adicionar")
+
+            if salvar:
+
+                novo = pd.DataFrame([
+                    [nome, limite, fechamento, vencimento]
+                ], columns=ARQUIVOS["cartoes.csv"])
+
+                cartoes = pd.concat([cartoes, novo])
+                cartoes.to_csv("cartoes.csv", index=False)
+
+                st.success("Cartão cadastrado")
+                st.rerun()
+
+    with col_b:
+
+        for _, row in cartoes.iterrows():
+
+            gasto = despesas_mes[
+                despesas_mes["conta"] == f"Cartão {row['cartao']}"
+            ]["valor"].sum()
+
+            limite = float(row["limite"])
+            disponivel = limite - gasto
+            pct = (gasto / limite) * 100 if limite > 0 else 0
+
+            st.markdown("---")
+
+            c1, c2, c3 = st.columns(3)
+
+            c1.metric(row["cartao"], f"R$ {gasto:,.2f}")
+            c2.metric("Disponível", f"R$ {disponivel:,.2f}")
+            c3.metric("Uso", f"{pct:.1f}%")
+
+# =====================================================
+# ANÁLISE
+# =====================================================
+elif st.session_state.pagina == "Analise":
+
+    st.title("📊 Inteligência Financeira")
+
+    if not despesas_mes.empty:
+
+        categoria = despesas_mes.groupby("categoria")["valor"].sum().reset_index()
+
+        fig = px.pie(
+            categoria,
+            names="categoria",
+            values="valor",
+            hole=0.6,
+            title="Para onde está indo seu dinheiro"
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        diario = despesas_mes.groupby(
+            despesas_mes["data"].dt.day
+        )["valor"].sum().reset_index()
+
+        fig2 = px.line(
+            diario,
+            x="data",
+            y="valor",
+            title="Evolução dos gastos"
+        )
+
+        st.plotly_chart(fig2, use_container_width=True)
+
+        gasto_cartao = despesas_mes[
+            despesas_mes["conta"].astype(str).str.contains("Cartão", na=False)
+        ]["valor"].sum()
+
+        gasto_debito = gastos_total - gasto_cartao
+
+        c1, c2 = st.columns(2)
+
+        c1.metric(
+            "💳 Gasto no Cartão",
+            f"R$ {gasto_cartao:,.2f}"
+        )
+
+        c2.metric(
+            "🏦 Débito/Pix",
+            f"R$ {gasto_debito:,.2f}"
+        )
+
+        st.info(
+            f"Você já gastou {comprometimento:.1f}% da sua renda mensal."
+        )
+
+    else:
+        st.warning("Sem dados suficientes")
+
+# =====================================================
+# INVESTIMENTOS
+# =====================================================
+elif st.session_state.pagina == "Investimentos":
+
+    st.title("📈 Investimentos")
+
+    col1, col2 = st.columns([1, 2])
+
+    with col1:
+
+        with st.form("invest"):
+
+            ativo = st.text_input("Ativo")
+            tipo = st.selectbox(
+                "Tipo",
+                ["Ações", "FIIs", "Tesouro", "Cripto", "Reserva"]
+            )
+            valor = st.number_input("Valor")
+
+            salvar = st.form_submit_button("Registrar")
+
+            if salvar:
+
+                novo = pd.DataFrame([
+                    [hoje, ativo, tipo, valor]
+                ], columns=ARQUIVOS["investimentos.csv"])
+
+                investimentos = pd.concat([
+                    investimentos,
+                    novo
+                ])
+
+                investimentos.to_csv(
+                    "investimentos.csv",
+                    index=False
+                )
+
+                st.success("Investimento registrado")
+                st.rerun()
+
+    with col2:
+
+        if not investimentos.empty:
+
+            grp = investimentos.groupby("tipo")["valor"].sum().reset_index()
+
+            fig = px.pie(
+                grp,
+                names="tipo",
+                values="valor",
+                title="Distribuição da carteira"
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+            st.metric(
+                "Patrimônio Investido",
+                f"R$ {invest_total:,.2f}"
+            )
+
+# =====================================================
+# PATRIMÔNIO
+# =====================================================
+elif st.session_state.pagina == "Patrimonio":
+
+    st.title("🏦 Patrimônio")
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric("Inter", f"R$ {saldo_inter:,.2f}")
+    c2.metric("Itaú", f"R$ {saldo_itau:,.2f}")
+    c3.metric("Investimentos", f"R$ {invest_total:,.2f}")
+    c4.metric("Patrimônio", f"R$ {patrimonio_total:,.2f}")
+
+    st.divider()
+
     with st.form("pat_form"):
-        c_p1, c_p2 = st.columns(2)
-        new_sal = c_p1.number_input("Salário Mensal", value=v_salario)
-        new_ext = c_p2.number_input("Renda Extra", value=v_extra)
-        new_inter = c_p1.number_input("Saldo Banco Inter", value=v_inter)
-        new_itau = c_p2.number_input("Saldo Banco Itaú", value=v_itau)
-        
-        if st.form_submit_button("Salvar Configurações"):
-            df_pat = pd.DataFrame([[new_sal, new_ext, new_inter, new_itau]], columns=ARQS["patrimonio.csv"])
-            df_pat.to_csv("patrimonio.csv", index=False)
-            st.success("Dados atualizados!")
-            st.rerun()
 
-# (As outras telas seguem a mesma lógica de segurança de dados)
+        col1, col2 = st.columns(2)
+
+        inter = col1.number_input("Saldo Inter", value=saldo_inter)
+        itau = col2.number_input("Saldo Itaú", value=saldo_itau)
+        sal = col1.number_input("Salário", value=salario)
+        extra = col2.number_input("Renda Extra", value=renda_extra)
+
+        salvar = st.form_submit_button("Salvar")
+
+        if salvar:
+
+            novo = pd.DataFrame([
+                [inter, itau, sal, extra]
+            ], columns=ARQUIVOS["patrimonio.csv"])
+
+            novo.to_csv("patrimonio.csv", index=False)
+
+            st.success("Patrimônio atualizado")
+            st.rerun()
