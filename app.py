@@ -1,5 +1,3 @@
-Financeiro PRO — Versão Ultra
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -117,6 +115,52 @@ def criar_banco():
 
 criar_banco()
 
+
+# =====================================================
+# CORREÇÃO E COMPATIBILIDADE DOS CSV
+# =====================================================
+
+def corrigir_csvs():
+
+    if Path("cartoes.csv").exists():
+        try:
+            df = pd.read_csv("cartoes.csv")
+
+            if "banco_cartao" in df.columns and "cartao" not in df.columns:
+                df = df.rename(columns={"banco_cartao": "cartao"})
+
+            if "limite" not in df.columns:
+                df["limite"] = 0
+
+            if "fechamento" not in df.columns:
+                df["fechamento"] = 1
+
+            if "vencimento" not in df.columns:
+                df["vencimento"] = 10
+
+            df = df[["cartao", "limite", "fechamento", "vencimento"]]
+            df.to_csv("cartoes.csv", index=False)
+
+        except:
+            pd.DataFrame(columns=ARQUIVOS["cartoes.csv"]).to_csv("cartoes.csv", index=False)
+
+    if Path("despesas.csv").exists():
+        try:
+            df = pd.read_csv("despesas.csv")
+
+            if "tipo" not in df.columns:
+                df["tipo"] = "Única"
+
+            if "paga" not in df.columns:
+                df["paga"] = False
+
+            df.to_csv("despesas.csv", index=False)
+
+        except:
+            pass
+
+
+corrigir_csvs()
 
 # =====================================================
 # LOAD
@@ -369,10 +413,17 @@ if st.session_state.pagina == "Home":
                 ]
             )
 
+            lista_cartoes = []
+
+            if not cartoes.empty:
+                if "cartao" in cartoes.columns:
+                    lista_cartoes = cartoes["cartao"].fillna("").astype(str).tolist()
+                elif "banco_cartao" in cartoes.columns:
+                    lista_cartoes = cartoes["banco_cartao"].fillna("").astype(str).tolist()
+
             conta = st.selectbox(
                 "Conta",
-                ["Inter", "Itaú"] +
-                [f"Cartão {x}" for x in cartoes["cartao"]]
+                ["Inter", "Itaú"] + [f"Cartão {x}" for x in lista_cartoes]
             )
 
             parcelado = st.checkbox("Compra parcelada?")
@@ -717,42 +768,3 @@ elif st.session_state.pagina == "Patrimonio":
 
             st.success("Patrimônio atualizado")
             st.rerun()
-
-MELHORIAS IMPLEMENTADAS
-
-Interface dark premium estilo banco digital
-
-Home inteligente com métricas automáticas
-
-Sistema de alertas financeiros
-
-Controle completo de cartões
-
-Parcelamentos automáticos
-
-Previsão financeira do mês
-
-Gestão patrimonial
-
-Controle de investimentos
-
-Gráficos inteligentes
-
-Arquitetura modular
-
-Persistência em CSV
-
-UX moderna estilo fintech
-
-Menu horizontal
-
-Cards premium
-
-Indicadores automáticos
-
-Assistente financeiro ativo
-
-
-EXECUTAR
-
-streamlit run financeiropro.py
