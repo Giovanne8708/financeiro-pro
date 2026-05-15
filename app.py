@@ -6,7 +6,7 @@ from pathlib import Path
 
 st.set_page_config(page_title="Financeiro PRO", layout="wide")
 
-# ========= CSS DARK PREMIUM =========
+# ========= CSS DARK =========
 st.markdown("""
 <style>
 .stApp {background:#0F1115;color:white;font-family:Segoe UI;}
@@ -32,7 +32,7 @@ if not st.session_state.logado:
             st.rerun()
     st.stop()
 
-# ========= BANCO CSV =========
+# ========= CSV =========
 ARQS={
 "receitas.csv":["data","origem","valor","conta"],
 "despesas.csv":["data","categoria","descricao","valor","conta"],
@@ -55,23 +55,6 @@ def save(df,a):
 
 init()
 
-# ========= MENU HORIZONTAL =========
-if "pagina" not in st.session_state:
-    st.session_state.pagina="Home"
-
-c1,c2,c3,c4,c5=st.columns(5)
-if c1.button("🏠 Home"): st.session_state.pagina="Home"
-if c2.button("💳 Cartões"): st.session_state.pagina="Cartões"
-if c3.button("📊 Análise"): st.session_state.pagina="Analise"
-if c4.button("🏦 Patrimônio"): st.session_state.pagina="Patrimonio"
-if c5.button("🚪 Sair"):
-    st.session_state.logado=False
-    st.rerun()
-
-st.divider()
-pagina=st.session_state.pagina
-
-# ========= DADOS BASE =========
 rec=load("receitas.csv")
 desp=load("despesas.csv")
 fixos=load("fixos.csv")
@@ -79,6 +62,23 @@ cart=load("cartoes.csv")
 inv=load("investimentos.csv")
 
 saldo=rec["valor"].sum()-desp["valor"].sum()
+
+# ========= MENU HORIZONTAL =========
+if "pagina" not in st.session_state:
+    st.session_state.pagina="Home"
+
+c1,c2,c3,c4,c5,c6=st.columns(6)
+if c1.button("🏠 Home"): st.session_state.pagina="Home"
+if c2.button("💳 Cartões"): st.session_state.pagina="Cartões"
+if c3.button("📊 Análise"): st.session_state.pagina="Analise"
+if c4.button("🏦 Patrimônio"): st.session_state.pagina="Patrimonio"
+if c5.button("📈 Investimentos"): st.session_state.pagina="Investimentos"
+if c6.button("🚪 Sair"):
+    st.session_state.logado=False
+    st.rerun()
+
+st.divider()
+pagina=st.session_state.pagina
 
 # ========= HOME =========
 if pagina=="Home":
@@ -89,26 +89,12 @@ if pagina=="Home":
     </div>
     """,unsafe_allow_html=True)
 
-    # FATURA CARTÕES
-    if not cart.empty:
-        for _,r in cart.iterrows():
-            fatura=desp[desp["conta"]==f"Cartão {r['banco_cartao']}"]["valor"].sum()
-            st.markdown(f"""
-            <div class="card">
-            <b>💳 Fatura {r['banco_cartao']}</b>
-            <h3>R$ {fatura:,.2f}</h3>
-            </div>
-            """,unsafe_allow_html=True)
-
-    # FIXOS A PAGAR
     st.subheader("⚠️ Contas Fixas Pendentes")
     for idx,r in fixos.iterrows():
         if r["parcelas_total"]==0 or r["parcelas_pagas"]<r["parcelas_total"]:
             col1,col2=st.columns([4,1])
-            col1.markdown(f"""
-            <div class="card">
-            <b>{r['descricao']}</b><br>
-            R$ {r['valor_parcela']:,.2f}
+            col1.markdown(f"""<div class="card">
+            <b>{r['descricao']}</b><br>R$ {r['valor_parcela']:,.2f}
             </div>""",unsafe_allow_html=True)
             if col2.button("Pagar",key=idx):
                 nova=pd.DataFrame([{
@@ -122,7 +108,6 @@ if pagina=="Home":
                 save(fixos,"fixos.csv")
                 st.rerun()
 
-    # LANÇAMENTOS RÁPIDOS
     st.subheader("➕ Lançamento Rápido")
     with st.form("rapido"):
         c1,c2,c3=st.columns(3)
@@ -142,22 +127,79 @@ if pagina=="Home":
     st.subheader("🕘 Últimos Lançamentos")
     ult=desp.sort_values("data",ascending=False).head(5)
     for _,r in ult.iterrows():
-        st.markdown(f"""
-        <div class="card">
+        st.markdown(f"""<div class="card">
         {r['descricao']} • {r['data']}
         <h3>R$ {r['valor']:,.2f}</h3>
         </div>""",unsafe_allow_html=True)
 
 # ========= CARTÕES =========
 elif pagina=="Cartões":
+    st.title("💳 Cartões")
     for _,r in cart.iterrows():
-        fatura=desp[desp["conta"]==f"Cartão {r['banco_cartao']}"]["valor"].sum()
-        st.markdown(f"""
-        <div class="card">
-        <h3>{r['banco_cartao']}</h3>
-        Fatura: R$ {fatura:,.2f}
-        </div>
-        """,unsafe_allow_html=True)
+        nome=r["banco_cartao"]
+        limite=r["limite_total"]
+        fatura=desp[desp["conta"]==f"Cartão {nome}"]["valor"].sum()
+        disponivel=limite-fatura
+        st.markdown(f"""<div class="card">
+        <h3>{nome}</h3>
+        Limite: R$ {limite:,.2f}<br>
+        Fatura: R$ {fatura:,.2f}<br>
+        Disponível: R$ {disponivel:,.2f}
+        </div>""",unsafe_allow_html=True)
+
+    st.subheader("➕ Novo Cartão")
+    with st.form("novo_cartao"):
+        b=st.text_input("Banco do Cartão")
+        l=st.number_input("Limite",0.0)
+        v=st.number_input("Vencimento",1,31)
+        if st.form_submit_button("Salvar"):
+            novo=pd.DataFrame([{
+            "banco_cartao":b,"limite_total":l,"dia_vencimento":v}])
+            save(pd.concat([cart,novo]),"cartoes.csv")
+            st.rerun()
+
+# ========= INVESTIMENTOS =========
+elif pagina=="Investimentos":
+    st.title("📈 Investimentos")
+
+    with st.form("novo_inv"):
+        c1,c2,c3=st.columns(3)
+        ativo=c1.text_input("Ativo")
+        valor=c2.number_input("Valor",0.0)
+        tipo=c3.selectbox("Tipo",["Tesouro","Ações","Cripto","Liquidez"])
+        if st.form_submit_button("Registrar Aporte"):
+            novo=pd.DataFrame([{
+            "data":date.today(),"ativo":ativo,
+            "tipo":tipo,"valor":valor,"instituicao":"Carteira"}])
+            save(pd.concat([inv,novo]),"investimentos.csv")
+
+            nova_desp=pd.DataFrame([{
+            "data":date.today(),"categoria":"Investimento",
+            "descricao":f"Aporte {ativo}",
+            "valor":valor,"conta":"Inter"}])
+            save(pd.concat([desp,nova_desp]),"despesas.csv")
+            st.rerun()
+
+    for _,r in inv.iterrows():
+        st.markdown(f"""<div class="card">
+        {r['ativo']} ({r['tipo']})<br>
+        R$ {r['valor']:,.2f}
+        </div>""",unsafe_allow_html=True)
+
+# ========= PATRIMONIO =========
+elif pagina=="Patrimonio":
+    st.title("🏦 Patrimônio")
+    total=inv["valor"].sum()
+    st.markdown(f"""<div class="card-destaque">
+    <h2>Patrimônio Total</h2>
+    <h1>R$ {total:,.2f}</h1>
+    </div>""",unsafe_allow_html=True)
+
+    if not inv.empty:
+        resumo=inv.groupby("tipo")["valor"].sum().reset_index()
+        fig=px.pie(resumo,values="valor",names="tipo",
+        template="plotly_dark")
+        st.plotly_chart(fig,use_container_width=True)
 
 # ========= ANALISE =========
 elif pagina=="Analise":
@@ -165,13 +207,3 @@ elif pagina=="Analise":
         fig=px.pie(desp,values="valor",names="categoria",
         template="plotly_dark")
         st.plotly_chart(fig,use_container_width=True)
-
-# ========= PATRIMONIO =========
-elif pagina=="Patrimonio":
-    total=inv["valor"].sum()
-    st.markdown(f"""
-    <div class="card-destaque">
-    <h2>🏦 Patrimônio Total</h2>
-    <h1>R$ {total:,.2f}</h1>
-    </div>
-    """,unsafe_allow_html=True)
