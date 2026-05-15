@@ -73,6 +73,10 @@ st.markdown("""
     color: #00e0b8;
 }
 
+div[data-testid="stHorizontalBlock"] .stButton {
+    padding-top: 12px;
+}
+
 .stButton>button {
     border-radius: 12px;
     background: #00d4aa !important;
@@ -80,7 +84,12 @@ st.markdown("""
     font-weight: 800 !important;
     font-size: 15px !important;
     border: none;
-    height: 48px;
+    height: 58px;
+    min-height: 58px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
     width: 100%;
 }
 
@@ -323,6 +332,8 @@ if previsao_final > receita_total:
 # =====================================================
 if "pagina" not in st.session_state:
     st.session_state.pagina = "Home"
+
+st.markdown("<div style='margin-top:20px'></div>", unsafe_allow_html=True)
 
 menu = st.columns(5)
 
